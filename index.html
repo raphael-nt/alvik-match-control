@@ -253,7 +253,9 @@ body.arena-on{overflow:hidden}
 }
 
 /* live stamping */
-#arena{grid-template-rows:auto auto minmax(230px,1fr) auto auto}
+#arena{grid-template-rows:none;grid-auto-rows:auto;align-content:start}
+.timer{overflow:visible;min-height:auto}
+.clock{font-size:min(24vw,30vh)}
 .elapsed{font:600 15px var(--f-num);color:var(--muted);min-height:20px}
 .live{width:min(1100px,100%);margin:0 auto;display:grid;gap:8px}
 .live .lhead{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:center;font-weight:600}
@@ -283,6 +285,26 @@ body.arena-on{overflow:hidden}
 @keyframes pop{0%{transform:scale(1.12);background:var(--wood-soft);border-color:var(--wood)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.seed.pop{animation:none}}
 @media (max-width:720px){ .live .cols{grid-template-columns:1fr} #arena{grid-template-rows:none} }
+
+.patseg button{min-width:48px;font-size:16px;padding:6px 12px}
+.patseg button.on{background:var(--wood);color:#fff}
+.games select[data-k="pat"]{width:76px}
+/* touch devices: phone and iPad */
+@media (pointer:coarse){
+  .btn{min-height:42px;padding:8px 14px}
+  .btn.small{min-height:38px}
+  .seg button{min-height:38px;padding:6px 14px}
+  .games input,.games select,.field input,.seed input,.title-in,#tSet{font-size:16px}
+  .games input.tm{width:70px}
+  .games select{width:64px}
+  .grip{width:34px;height:34px;font-size:20px}
+  .ar-nav button{min-height:38px}
+  .live .cnt button{width:48px;height:48px}
+  .live .st{min-height:48px;min-width:72px}
+}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+button,select,input{-webkit-tap-highlight-color:transparent}
 </style>
 </head>
 <body>
@@ -611,7 +633,7 @@ function renderEditor(){
     const tm=(k,lab)=> (show[k]||String(g[k]??"")!=="") ? `<td><input data-k="${k}" class="tm" inputmode="numeric" placeholder="m:ss" value="${esc(g[k]??"")}" aria-label="${lab}"></td>` : `<td class="na">.</td>`;
     rows+=`<tr data-g="${i}">
       <td class="num">${i+1}</td>
-      <td>${g.pat?("แบบ "+g.pat):"-"}</td>
+      <td><select data-k="pat" aria-label="แบบสนาม"><option value="">-</option>${["1","2","3"].map(v=>`<option value="${v}"${g.pat===v?" selected":""}>แบบ ${v}</option>`).join("")}</select></td>
       <td>${cnt("rc")}</td>${tm("rt","เวลาครบ แดง")}${tm("rl","ยกแรก แดง")}${tm("rx","ออกกรอบ แดง")}
       <td>${cnt("bc")}</td>${tm("bt","เวลาครบ น้ำเงิน")}${tm("bl","ยกแรก น้ำเงิน")}${tm("bx","ออกกรอบ น้ำเงิน")}
       <td><div class="seg"><button class="r${w&&w.side==="red"?" on":""}" data-win="red">แดง</button><button class="b${w&&w.side==="blue"?" on":""}" data-win="blue">น้ำเงิน</button></div><div>${meth}</div>${warns.map(x=>`<span class="warnx">${esc(x)}</span>`).join("")}</td>
@@ -643,7 +665,7 @@ function renderLive(){
     return `<div class="col ${cls}"><div class="nm">${esc(teamName(side==="red"?R.red:R.blue))}</div>
       <div class="ctl"><span class="cnt"><button data-cnt="${c}c" data-d="-1" aria-label="ลดจำนวนแท่น">-</button><b>${v??0}<small>แท่น</small></b><button data-cnt="${c}c" data-d="1" aria-label="เพิ่มจำนวนแท่น">+</button></span>
       ${stamp("l","ยกแรก")}${stamp("t","ครบ 3")}${stamp("x","ออกกรอบ")}</div></div>`; };
-  el.innerHTML=`<div class="lhead"><span>เกม ${gi+1} จาก Bo${m.bo}</span><span class="pat">${g.pat?"สนามแบบ "+g.pat:"ยังไม่สุ่มสนาม"}</span><button class="btn small" data-pat>สุ่มแบบสนาม</button></div>
+  el.innerHTML=`<div class="lhead"><span>เกม ${gi+1} จาก Bo${m.bo}</span><span>สนามแบบ</span><span class="seg patseg">${["1","2","3"].map(v=>`<button class="${g.pat===v?"on":""}" data-pat="${v}" aria-pressed="${g.pat===v}">${v}</button>`).join("")}</span>${g.pat?"":'<span class="hint">เลือกแบบสนามที่สุ่มได้</span>'}</div>
     <div class="cols">${col("red","r")}${col("blue","b")}</div>
     <div class="lhead"><button class="btn primary" data-endgame>จบเกม ${gi+1} และตัดสินผล</button></div>
     <div class="msg" id="liveMsg">${esc(liveMsg)}</div>`;
@@ -728,7 +750,8 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-undo]")){ undo(); return; }
   if(e.target.closest("[data-next]")||e.target.id==="bNext"){ goNext(); return; }
   if(e.target.closest("[data-endgame]")){ endLiveGame(); return; }
-  if(e.target.closest("[data-pat]")){ liveEdit(g=>{ g.pat=String(1+Math.floor(Math.random()*3)); }); return; }
+  const pb=e.target.closest("[data-pat]");
+  if(pb){ const v=pb.dataset.pat; liveEdit(g=>{ g.pat = g.pat===v ? "" : v; }); return; }
   const cb=e.target.closest("[data-cnt]");
   if(cb){ const k=cb.dataset.cnt, d=+cb.dataset.d, el=elapsedNow();
     liveEdit(g=>{ const v=Math.max(0,Math.min(3,(n(g[k])??0)+d)); g[k]=String(v);
@@ -760,12 +783,13 @@ function setView(v){
   if(on) scrollGames(); else setTimeout(fitBracket,0);
 }
 document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+if(!document.documentElement.requestFullscreen) document.querySelectorAll(".fsbtn").forEach(b=>b.hidden=true);
 document.querySelectorAll(".fsbtn").forEach(b=>b.onclick=()=>{ if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else document.documentElement.requestFullscreen?.().catch(()=>{}); });
 document.addEventListener("fullscreenchange",()=>{ document.querySelectorAll(".fsbtn").forEach(b=>b.textContent=document.fullscreenElement?"ออกจากเต็มจอ":"เต็มจอ"); setTimeout(fitBracket,50); });
 /* scale the bracket to fill the screen */
 function fitBracket(){
   const board=document.querySelector(".board"); if(!board||!board.offsetParent) return;
-  const narrow = board.clientWidth < 760;
+  const narrow = board.clientWidth < 760 || board.clientWidth/(CANVAS_W+10) < 0.6;
   if(narrow!==NARROW){ NARROW=narrow; $("listView").hidden=!narrow; document.querySelector(".scroller").hidden=narrow; render(); }
   if(NARROW) return;
   const sc=document.querySelector(".scroller"), c=$("canvas");
@@ -961,6 +985,7 @@ async function idbGet(k){ try{ const d=await idb(); return await new Promise(r=>
 /* ---------- match timer ---------- */
 const T={dur:90, left:90, endAt:0, running:false, raf:0, lastBeep:null, mode:"game", chain:false, cd:0};
 let actx=null;
+document.addEventListener("pointerdown",()=>{ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended") actx.resume(); }catch(e){} },{once:true});
 function beep(freq=880,ms=140,vol=.25){
   try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
     const o=actx.createOscillator(), g=actx.createGain(); o.frequency.value=freq; o.type="square";
