@@ -3,8 +3,8 @@ export const SB_URL = "https://sylaqdubfjgmaxhtrrnk.supabase.co";
 export const SB_KEY = "sb_publishable_9x3-7C7fLbQZBDtkk8YAGw_P1XclMv8";
 export const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const PK = { a2_event: "id", a2_team: "seed", a2_match: "code", a2_game: "id", a2_field: "no", a2_tiebreak: "grp" };
-export const T = { a2_event: new Map(), a2_team: new Map(), a2_match: new Map(), a2_game: new Map(), a2_field: new Map(), a2_tiebreak: new Map() };
+const PK = { a2_event: "id", a2_team: "seed", a2_match: "code", a2_game: "id", a2_field: "no", a2_tiebreak: "grp", a2_group: "grp" };
+export const T = { a2_event: new Map(), a2_team: new Map(), a2_match: new Map(), a2_game: new Map(), a2_field: new Map(), a2_tiebreak: new Map(), a2_group: new Map() };
 export const S = { standings: [], ranking: [], net: "wait", offset: 0, ready: false };
 
 const listeners = new Set();
@@ -18,6 +18,8 @@ export const matches = () => [...T.a2_match.values()].sort((a, b) => a.order_no 
 export const match = (c) => T.a2_match.get(c);
 export const fields = () => [...T.a2_field.values()].filter((f) => f.no <= event().field_count).sort((a, b) => a.no - b.no);
 export const field = (n) => T.a2_field.get(n);
+export const groups = () => [...T.a2_group.values()].sort((a, b) => a.grp.localeCompare(b.grp));
+export const teamAbsent = (seed) => !!T.a2_team.get(seed)?.absent;
 export const gamesOf = (code) => [...T.a2_game.values()].filter((g) => g.match_code === code && g.status !== "void").sort((a, b) => a.idx - b.idx);
 export const openGame = (code) => gamesOf(code).filter((g) => ["ready", "live", "review"].includes(g.status)).pop() || null;
 export const gameNo = (code, g) => gamesOf(code).filter((x) => x.idx <= g.idx && x.status !== "replay").length;
@@ -77,11 +79,11 @@ export const REASON_TH = { replay: "ผลเท่ากันทุกอย�
 // ---------- โหลดและติดตามข้อมูล ----------
 export async function loadAll() {
   const q = (t) => sb.from(t).select("*");
-  const [ev, tm, ma, ga, fi, tb, st, rk] = await Promise.all([q("a2_event"), q("a2_team"), q("a2_match"), q("a2_game"), q("a2_field"), q("a2_tiebreak"), sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*")]);
-  const err = [ev, tm, ma, ga, fi, tb, st, rk].find((r) => r.error);
+  const [ev, tm, ma, ga, fi, tb, st, rk, gr] = await Promise.all([q("a2_event"), q("a2_team"), q("a2_match"), q("a2_game"), q("a2_field"), q("a2_tiebreak"), sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*"), q("a2_group")]);
+  const err = [ev, tm, ma, ga, fi, tb, st, rk, gr].find((r) => r.error);
   if (err) throw err.error;
   const fill = (name, rows) => { const m = T[name]; m.clear(); rows.forEach((r) => m.set(r[PK[name]], r)); };
-  fill("a2_event", ev.data); fill("a2_team", tm.data); fill("a2_match", ma.data); fill("a2_game", ga.data); fill("a2_field", fi.data); fill("a2_tiebreak", tb.data);
+  fill("a2_event", ev.data); fill("a2_team", tm.data); fill("a2_match", ma.data); fill("a2_game", ga.data); fill("a2_field", fi.data); fill("a2_tiebreak", tb.data); fill("a2_group", gr.data);
   S.standings = st.data; S.ranking = rk.data.sort((a, b) => a.pos - b.pos); S.ready = true;
   notify();
 }
@@ -101,7 +103,7 @@ export function connect() {
     setNet("wait");
     if (ch) { try { sb.removeChannel(ch); } catch (e) {} }
     ch = sb.channel("a2-" + Math.random().toString(36).slice(2, 8));
-    for (const t of Object.keys(PK)) {
+    for (const t of Object.keys(PK).filter((x) => x !== "a2_group")) {
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (p) => {
         const row = p.eventType === "DELETE" ? p.old : p.new, m = T[t];
         if (p.eventType === "DELETE") m.delete(row[PK[t]]); else m.set(row[PK[t]], { ...(m.get(row[PK[t]]) || {}), ...row });

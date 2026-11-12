@@ -43,3 +43,20 @@ dialog::backdrop{background:#16191Bb0}
 @media (max-width:700px){.top{padding:8px 12px}.main{padding:12px}.fc .t{font-size:44px}}
 .form,.form label{min-width:0}.form input,.form select{width:100%}
 @media (max-width:700px){.form .two{grid-template-columns:1fr}.lk{grid-template-columns:1fr}}
+.home{display:grid;gap:14px}
+.hbk{padding:10px}
+.hbot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:end}
+@media (max-width:980px){.hbot{grid-template-columns:minmax(0,1fr)}}
+.rq{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.rq span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hclk{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}.hclk.n1{grid-template-columns:1fr}
+.ck{background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:var(--r-md);padding:10px 14px;display:grid;gap:2px}
+.ck.st-live{border-left-color:var(--tape)}.ck.st-queued{border-left-color:var(--teal)}.ck.st-done{border-left-color:var(--done)}.ck.empty{opacity:.6}
+.ckh{display:flex;gap:10px;align-items:baseline}.ckh span{color:var(--muted)}
+.ckh .dot{width:9px;height:9px;border-radius:50%;background:var(--line);margin-left:auto;align-self:center}.ckh .dot.on{background:var(--done)}
+.ckv{display:flex;gap:8px;align-items:baseline;font-size:15px;min-width:0}.ckv .r{color:var(--red)}.ckv .b{color:var(--blue)}.ckv span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.ckv b{font-size:18px}
+.ckt{font-size:54px;font-weight:600;line-height:1.05;letter-spacing:-.02em}.ckt.warn{color:var(--red)}.ckp{font-size:14px}
+.teams .grp div{grid-template-columns:28px minmax(0,1fr) auto}.ab{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--muted)}.ab input{min-height:0}
+.top b{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.top .btn{white-space:nowrap}
+.hbk{overflow-x:auto}.hbk .bk{min-width:900px}
