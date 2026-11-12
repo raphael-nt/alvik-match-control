@@ -1,11 +1,12 @@
+import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { connect, onChange, event, fields, matches, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fieldLeft, fieldPhaseLabel, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
 const app = $("app"), dlg = $("dlg");
 const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} return null; };
 const lstore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
 let pw = store("a2pw") || "", authed = false, started = false, hasSetup = null;
-let tab = lstore("a2tab") || "queue";
-const TABS = [["queue", "คิวสนาม"], ["schedule", "ตั้งเวลา"], ["groups", "สายและอันดับ"], ["matches", "ทุกคู่"], ["teams", "ทีม"], ["tv", "หน้า TV"], ["settings", "ตั้งค่า"], ["log", "ประวัติ"]];
+let tab = lstore("a2tab") || "home";
+const TABS = [["home", "ภาพรวม"], ["queue", "คิวสนาม"], ["schedule", "ตั้งเวลา"], ["groups", "สายและอันดับ"], ["matches", "ทุกคู่"], ["teams", "ทีม"], ["tv", "หน้า TV"], ["settings", "ตั้งค่า"], ["log", "ประวัติ"]];
 const ROUND = { r1: "รอบแรก", r2: "รอบสอง", final: "ชิงชนะเลิศ" };
 
 // ---------- เรียก RPC ของแอดมิน ----------
@@ -61,17 +62,34 @@ function shell() {
 
 // ---------- วาดหน้า ----------
 let lastKey = "", formTab = "";
+if (!TABS.some((t) => t[0] === tab)) tab = "home";
 const FORM_TABS = ["schedule", "teams", "settings"];   // แท็บที่มีช่องกรอก วาดซ้ำเฉพาะตอนสลับแท็บหรือหลังกดบันทึก
 function render(force) {
   if (!authed || !S.ready) { if (authed) { const mn = $("mn"); if (mn && !mn.innerHTML) mn.innerHTML = `<p class="muted">กำลังโหลดข้อมูล</p>`; } return; }
   const ev = event(); const en = $("evn"); if (en && en.textContent !== ev.name) en.textContent = ev.name || "Alvik";
   paintNet();
   if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); } updateDlgBanner(); return; }
-  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => t.name), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.sched_field, m.auto_open]), fields().map((f) => [f.no, f.match_code, f.phase, f.running, f.left_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
+  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.sched_field, m.auto_open, m.walkover, m.forfeit]), fields().map((f) => [f.no, f.match_code, f.phase, f.running, f.left_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
   if (k === lastKey) { updateDlgBanner(); return; }
-  lastKey = k; $("mn").innerHTML = VIEW[tab](); updateDlgBanner();
+  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); updateDlgBanner();
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
+
+// ---------- แท็บ ภาพรวม ----------
+function clockBox(f) {
+  const m = f.match_code ? match(f.match_code) : null;
+  if (!m) return `<div class="ck empty"><div class="ckh"><b>สนาม ${f.no}</b><span>ว่าง</span></div><div class="ckt" data-clk="${f.no}">${fmtMs(0)}</div></div>`;
+  const online = f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
+  return `<div class="ck st-${m.status}"><div class="ckh"><b>สนาม ${f.no}</b><span>${m.code}</span><span class="dot${online ? " on" : ""}" title="${online ? "กรรมการออนไลน์" : "ยังไม่มีกรรมการเข้า"}"></span></div>
+    <div class="ckv"><span class="r">${esc(sideName(m, "red"))}</span><b>${m.red_wins}-${m.blue_wins}</b><span class="b">${esc(sideName(m, "blue"))}</span></div>
+    <div class="ckt" data-clk="${f.no}">0:00</div><div class="ckp muted" data-ph="${f.no}"></div></div>`;
+}
+function homeView() {
+  const free = fields().filter(isFree), ready = matches().filter((m) => m.status === "ready").slice(0, 6);
+  const rq = ready.length ? ready.map((m) => `<div class="rq"><b>${m.code}</b><span>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</span><span class="muted">${m.sched_at ? fmtTime(m.sched_at) + (m.auto_open ? " เปิดเอง" : "") : ""}</span>${free.map((f) => `<button class="btn small primary" data-act="open" data-c="${m.code}" data-f="${f.no}">เปิดสนาม ${f.no}</button>`).join("")}</div>`).join("") : `<p class="muted">ไม่มีคู่ที่พร้อมเปิดคิว</p>`;
+  return `<div class="home"><div class="card hbk">${bracketHtml({ clickable: true })}</div>
+    <div class="hbot"><div class="card"><div class="h2"><h2>พร้อมเปิดคิว</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div class="hclk n${fields().length}">${fields().map(clockBox).join("")}</div></div></div>`;
+}
 
 // ---------- แท็บ คิวสนาม ----------
 const timerBtns = (f) => {
@@ -186,9 +204,10 @@ function dlgHtml(code) {
   const m = match(code), gs = gamesOf(code), fl = fields().filter(isFree);
   dlgSig = sigOf(code);
   return `<div class="dh"><h2>คู่ ${m.code}  ${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}  <span class="muted">${m.red_wins}-${m.blue_wins}</span></h2><span class="pill ${m.status}">${STATUS_TH[m.status]}</span><button class="btn" data-act="dclose">ปิด</button></div>
-   <div class="db"><div class="warn" id="dwarn" hidden>ข้อมูลคู่นี้เพิ่งเปลี่ยนจากที่อื่น <button class="btn small" data-act="dreload">โหลดใหม่</button> (ตัวเลขที่กรอกค้างไว้จะหายไป)</div>
+   <div class="db">${m.walkover ? `<div class="warn">ชนะบาย ${esc(sideName(m, m.walkover === "red" ? "blue" : "red"))} ชนะ เพราะ ${esc(sideName(m, m.walkover))} ไม่มา ${m.forfeit ? "" : "(ตั้งทีมนี้เป็นไม่มาไว้ในแท็บทีม)"}</div>` : ""}<div class="warn" id="dwarn" hidden>ข้อมูลคู่นี้เพิ่งเปลี่ยนจากที่อื่น <button class="btn small" data-act="dreload">โหลดใหม่</button> (ตัวเลขที่กรอกค้างไว้จะหายไป)</div>
    ${gs.length ? gs.map((g) => gameBlock(m, g)).join("") : `<p class="muted">ยังไม่มีเกมในคู่นี้ ${m.status === "locked" ? "คู่นี้ยังรอผลคู่ก่อนหน้า" : "เกมแรกจะถูกสร้างตอนเปิดคิว หรือกดเพิ่มเกมด้านล่าง"}</p>`}
    <div class="btns"><button class="btn" data-act="gadd" ${m.status === "locked" ? "disabled" : ""}>เพิ่มเกม</button>${!gs.length && m.status !== "done" ? `<button class="btn" data-act="swap">สลับฝั่งแดงกับน้ำเงิน</button>` : ""}
+   ${(m.red_seed != null && m.blue_seed != null && m.status !== "done") || m.forfeit ? ["red", "blue"].map((sd) => `<button class="btn danger" data-act="ff" data-s="${sd}">${esc(sideName(m, sd))} ไม่มา แพ้บาย</button>`).join("") : ""}${m.forfeit ? `<button class="btn" data-act="ff" data-s="">ยกเลิกแพ้บาย</button>` : ""}
    ${m.status === "ready" ? fl.map((f) => `<button class="btn primary" data-act="open" data-c="${m.code}" data-f="${f.no}" data-keep="1">เปิดคิวสนาม ${f.no}</button>`).join("") : ""}</div></div>`;
 }
 function openDlg(code) { dlgCode = code; dlg.innerHTML = dlgHtml(code); if (!dlg.open) dlg.showModal(); }
@@ -208,7 +227,7 @@ function readGame(card) {
 function teamsView() {
   const t = teamsArr(), draw = event().tv_mode === "draw";
   return `<div class="h2"><h2>ทีมแข่งขัน</h2><span>ลำดับ 1 ถึง 9 คือสายที่ทีมอยู่ A คือ 1-3 B คือ 4-6 C คือ 7-9 ใช้ปุ่มสุ่มเพื่อจับสาย</span></div>
-   <div class="teams">${["A", "B", "C"].map((G, gi) => `<div class="card grp"><h2>สาย ${G}</h2>${[1, 2, 3].map((j) => { const s = gi * 3 + j; return `<div><span class="muted">${s}</span><input data-seed="${s}" value="${esc(t.find((x) => x.seed === s)?.name || "")}" placeholder="ทีม ${s}" maxlength="40"></div>`; }).join("")}</div>`).join("")}</div>
+   <div class="teams">${["A", "B", "C"].map((G, gi) => `<div class="card grp"><h2>สาย ${G}</h2>${[1, 2, 3].map((j) => { const s = gi * 3 + j; return `<div><span class="muted">${s}</span><input data-seed="${s}" value="${esc(t.find((x) => x.seed === s)?.name || "")}" placeholder="ทีม ${s}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${s}" ${t.find((x) => x.seed === s)?.absent ? "checked" : ""}>ไม่มา</label></div>`; }).join("")}</div>`).join("")}</div>
    <div class="btns"><button class="btn primary" data-act="saveteams">บันทึกชื่อทีม</button><button class="btn" data-act="shuffle">สุ่มสลับสายในช่องกรอก</button></div>
    <div class="h2" style="margin-top:24px"><h2>จับสายบนจอ TV</h2><span>${draw ? "TV กำลังอยู่ในโหมดจับสาย" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม TV จะเผยชื่อทีมทีละทีม"}</span></div>
    <div class="btns"><button class="btn primary" data-act="drawstart">เริ่มเผยชื่อทีมบน TV</button><button class="btn" data-act="tvauto">กลับโหมดอัตโนมัติ</button></div>`;
@@ -216,8 +235,8 @@ function teamsView() {
 
 // ---------- แท็บ หน้า TV ----------
 function tvView() {
-  const ev = event(), M = [["auto", "อัตโนมัติ", "แสดงสนามที่กำลังแข่ง ถ้าไม่มีให้แสดงตารางสาย จบแล้วแสดงแชมป์"], ["fields", "สนามแข่ง", "คะแนนสด นาฬิกา"], ["groups", "สายและอันดับ", "ตารางทุกสาย"], ["draw", "จับสาย", "เผยชื่อทีม"], ["champion", "ประกาศแชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
-  return `<div class="h2"><h2>สั่งหน้า TV</h2><span>เปลี่ยนแล้ว TV เปลี่ยนตามทันที ปกติใช้โหมดอัตโนมัติ</span></div>
+  const ev = event(), M = [["auto", "อัตโนมัติ", "ตารางสายพร้อมคะแนนแต่ละสนาม จบคู่ชิงแล้วขึ้นแชมป์เอง"], ["bracket", "ตารางสาย", "ตารางสายแบบเส้นลาก และคะแนนสนาม"], ["groups", "ตารางคะแนน", "อันดับของทุกสาย"], ["fields", "สนามแบบใหญ่", "คะแนนสนามตัวใหญ่ เต็มจอ"], ["draw", "จับสาย", "เผยชื่อทีมทีละทีม"], ["champion", "ประกาศแชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  return `<div class="h2"><h2>สั่งหน้า TV</h2><span>เปลี่ยนแล้ว TV เปลี่ยนตามทันที ปกติใช้โหมดอัตโนมัติ TV ไม่แสดงนาฬิกา ถ้าต้องการให้ใส่ ?clock=1 ท้ายลิงก์ของหน้า TV</span></div>
    <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">กำลังใช้</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>ใช้โหมดนี้</button></div>`).join("")}</div>`;
 }
 
@@ -242,7 +261,7 @@ function afterForm() {
 
 // ---------- แท็บ ประวัติ ----------
 let logRows = [];
-const AL = { "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง",
+const AL = { "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง", "match.forfeit": "แพ้บาย", "team.absent": "ทีมไม่มา",
   "timer.start_setup": "เริ่ม Setup", "timer.start_game": "เริ่มแข่ง", "timer.pause": "หยุดนาฬิกา", "timer.resume": "เล่นต่อ", "timer.reset": "รีเซ็ตนาฬิกา",
   "game.pattern": "เลือกแบบสนาม", "game.parked_inc": "จอดเพิ่ม", "game.parked_dec": "จอดลด", "game.lift": "ยกแท่นแรก", "game.exit": "ออกจากกรอบแดง", "game.clear_lift": "ล้างยกแท่น", "game.clear_exit": "ล้างออกกรอบ", "game.finish": "จบเกม", "game.judge": "กรรมการตัดสิน" };
 const actorTh = (a) => (a === "admin" ? "แอดมิน" : a === "system:auto" ? "ระบบ เปิดคิวตามเวลา" : String(a).startsWith("ref:") ? "กรรมการ สนาม " + String(a).split("@")[1] : a);
@@ -251,13 +270,13 @@ function logView() {
 }
 async function loadLog() { logRows = (await act(() => adm("a2_adm_audit", { p_limit: 200 }))) || []; redraw(); }
 
-const VIEW = { queue: queueView, schedule: scheduleView, groups: groupsView, matches: matchesView, teams: teamsView, tv: tvView, settings: settingsView, log: logView };
+const VIEW = { home: homeView, queue: queueView, schedule: scheduleView, groups: groupsView, matches: matchesView, teams: teamsView, tv: tvView, settings: settingsView, log: logView };
 
 // ---------- นาฬิกาในการ์ดสนาม ----------
 function clocks() {
   document.querySelectorAll("[data-clk]").forEach((el) => {
     const f = T.a2_field.get(+el.dataset.clk); if (!f) return;
-    el.textContent = fmtMs(fieldLeft(f));
+    const left = fieldLeft(f); el.textContent = fmtMs(left); el.classList.toggle("warn", f.phase === "game" && left > 0 && left <= 10000);
     const ph = document.querySelector(`[data-ph="${f.no}"]`); if (ph) ph.textContent = fieldPhaseLabel(f);
   });
 }
@@ -291,6 +310,11 @@ const H = {
   async gvoid(b) { const card = b.closest("[data-g]"); if (!confirm("ลบเกมนี้ ผลที่นับไปแล้วจะถูกคำนวณใหม่")) return; await act(() => adm("a2_adm_game_void", { p_game: +card.dataset.g }), "ลบเกมแล้ว"); dlg.innerHTML = dlgHtml(dlgCode); },
   async gadd() { await act(() => adm("a2_adm_game_add", { p_code: dlgCode }), "เพิ่มเกมแล้ว"); dlg.innerHTML = dlgHtml(dlgCode); },
   async swap() { if (!confirm("สลับฝั่งแดงกับน้ำเงินของคู่นี้")) return; await act(() => adm("a2_adm_swap", { p_code: dlgCode }), "สลับแล้ว"); dlg.innerHTML = dlgHtml(dlgCode); },
+  async ff(b) {
+    const m = match(dlgCode), sd = b.dataset.s;
+    if (sd && !confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย (${Math.ceil(m.bo / 2)}-0)`)) return;
+    await act(() => adm("a2_adm_forfeit", { p_code: dlgCode, p_side: sd || null }), sd ? "บันทึกแพ้บายแล้ว" : "ยกเลิกแพ้บายแล้ว"); dlg.innerHTML = dlgHtml(dlgCode);
+  },
   autofill() { autofill(); },
   clearsc(b) { const tr = b.closest("tr"); tr.querySelector('[data-k="at"]').value = ""; tr.querySelector('[data-k="field"]').value = ""; tr.querySelector('[data-k="auto"]').checked = false; },
   async savesc() { const items = readSchedule(); if (await act(() => adm("a2_adm_schedule", { p_items: items }), "บันทึกเวลาแล้ว") !== undefined) { formTab = ""; render(); } },
@@ -326,6 +350,12 @@ const H = {
 };
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); if (!b || b.disabled) return; const f = H[b.dataset.act]; if (f) f(b); });
 document.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+document.addEventListener("change", async (e) => {
+  const c = e.target.closest("[data-abs]"); if (!c) return;
+  const seed = +c.dataset.abs, on = c.checked;
+  if (on && !confirm(`${teamName(seed)} ไม่มา แพ้บายทุกคู่ที่เหลือ`)) { c.checked = false; return; }
+  if ((await act(() => adm("a2_adm_absent", { p_seed: seed, p_absent: on }), on ? "ตั้งเป็นไม่มาแล้ว" : "ยกเลิกไม่มาแล้ว")) === undefined) c.checked = !on;
+});
 document.addEventListener("click", (e) => { if (e.target.closest('[data-tab="log"]')) loadLog(); });
 
 boot();
