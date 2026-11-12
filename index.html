@@ -356,6 +356,22 @@ button,select,input{-webkit-tap-highlight-color:transparent}
 .ar-top .brand{min-width:0}
 .view>*{min-width:0}
 @media (max-width:600px){ .brand{max-width:100%;min-width:0;flex:0 1 auto;gap:10px} .tabs{flex:0 1 auto} .tabs button{padding:6px 9px;white-space:nowrap} }
+/* groups */
+.gwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:12px}
+.gpanel{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:10px;align-content:start;background:var(--surface)}
+.gpanel h3{margin:0;font-size:16px;color:var(--ink)}
+.gseeds{display:grid;gap:6px}
+.gm{display:grid;gap:8px}
+.gtbl{width:100%;border-collapse:collapse;font-size:14px}
+.gtbl th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:2px 6px}
+.gtbl td{padding:6px;border-top:1px solid var(--line)}
+.gtbl td.num{font-family:var(--f-num);white-space:nowrap}
+.gtbl td.tn{overflow-wrap:anywhere}
+.gtbl tr.q td{background:var(--wood-soft)}
+.gtbl tr.tied td{background:color-mix(in srgb,var(--red) 8%,transparent)}
+.qtag{font-size:11px;font-weight:600;color:var(--wood);white-space:nowrap}
+.gpanel .warnx{display:block;margin:0}
+.dgh{margin:18px 0 6px;font-size:15px}
 /* online */
 .netpill{display:inline-flex;align-items:center;gap:6px}
 .netpill i{width:9px;height:9px;border-radius:50%;background:var(--line)}
@@ -421,7 +437,6 @@ button,select,input{-webkit-tap-highlight-color:transparent}
     <p class="hint" id="swapHint" hidden>ลากที่ปุ่ม ⠿ ไปวางทับอีกสายเพื่อสลับ หรือแตะ ⠿ ของสองสายต่อกัน กด "ล็อคสาย" เมื่อจัดเสร็จ</p>
     <div class="listview" id="listView" hidden></div>
     <p class="hint" id="fsaNote" hidden>เชื่อมไฟล์ Excel ได้เฉพาะ Chrome หรือ Edge บนคอมพิวเตอร์ เบราว์เซอร์นี้ใช้ปุ่มนำเข้าและดาวน์โหลด .xlsx แทน</p>
-    <div class="scroller"><div class="canvas" id="canvas"><svg id="wires" aria-hidden="true"></svg><div id="seedLayer"></div><div id="cardLayer"></div></div></div>
   </section>
 
   <section class="board rankp" aria-label="อันดับ">
@@ -627,16 +642,21 @@ document.addEventListener("click",async e=>{
 /* ---------- bracket definition (from the whiteboard) ---------- */
 const NTEAM = 9;
 const SEEDS = Array.from({length:NTEAM},(_,i)=>i+1);
-const MATCHES = [
-  {id:"P1", round:"รอบคัดเลือก",   bo:3, red:{seed:8}, blue:{seed:9}},
-  {id:"Q1", round:"รอบ 8 ทีม",     bo:3, red:{seed:1}, blue:{seed:2}},
-  {id:"Q2", round:"รอบ 8 ทีม",     bo:3, red:{seed:3}, blue:{seed:4}},
-  {id:"Q3", round:"รอบ 8 ทีม",     bo:3, red:{seed:5}, blue:{seed:6}},
-  {id:"Q4", round:"รอบ 8 ทีม",     bo:3, red:{seed:7}, blue:{w:"P1"}},
-  {id:"S1", round:"รอบรองชนะเลิศ", bo:3, red:{w:"Q1"}, blue:{w:"Q2"}},
-  {id:"S2", round:"รอบรองชนะเลิศ", bo:3, red:{w:"Q3"}, blue:{w:"Q4"}},
-  {id:"F",  round:"ชิงชนะเลิศ",    bo:5, red:{w:"S1"}, blue:{w:"S2"}},
-];
+// รอบแรก 3 สาย สายละ 3 ทีม พบกันหมด ที่ 1 และ 2 เข้ารอบ
+// รอบสอง 2 สาย สายละ 3 ทีม พบกันหมด ที่ 1 ของแต่ละสายชิงแชมป์
+const GROUPS = {
+  A:{round:"รอบแรก", adv:2, teams:[{seed:1},{seed:2},{seed:3}]},
+  B:{round:"รอบแรก", adv:2, teams:[{seed:4},{seed:5},{seed:6}]},
+  C:{round:"รอบแรก", adv:2, teams:[{seed:7},{seed:8},{seed:9}]},
+  D:{round:"รอบสอง", adv:1, teams:[{g:"A",p:1},{g:"C",p:1},{g:"B",p:2}]},
+  E:{round:"รอบสอง", adv:1, teams:[{g:"B",p:1},{g:"A",p:2},{g:"C",p:2}]},
+};
+const GIDS = Object.keys(GROUPS);
+const PAIRS = [[0,1],[1,2],[0,2]];
+const MATCHES = [];
+for(const set of [["A","B","C"],["D","E"]]) PAIRS.forEach((pr,k)=>set.forEach(G=>{ const g=GROUPS[G];
+  MATCHES.push({id:G+(k+1), round:g.round+" สาย "+G, grp:G, bo:3, red:g.teams[pr[0]], blue:g.teams[pr[1]]}); }));
+MATCHES.push({id:"F", round:"ชิงชนะเลิศ", bo:5, red:{g:"D",p:1}, blue:{g:"E",p:1}});
 const MBY = Object.fromEntries(MATCHES.map(m=>[m.id,m]));
 const SIDE_TH = {red:"แดง", blue:"น้ำเงิน"};
 const METHOD_TH = {Full:"ครบ 3 แท่นก่อน (6.1)", Count:"จอดมากกว่า (6.2)", Lift:"ยกแท่นแรกก่อน (6.3)", Exit:"ออกกรอบแดงก่อน (6.4)", Judge:"กรรมการตัดสิน"};
@@ -649,17 +669,20 @@ function blankState(){
     timerSec:90,
     teams:SEEDS.map(s=>({seed:s,name:"ทีม "+s})),
     matches:Object.fromEntries(MATCHES.map(m=>[m.id,{time:"",games:[]}])),
+    tb:{},
   };
 }
 let S = load() || blankState();
-let selected = "P1";
+let selected = "A1";
 function load(){ try{ const t = localStorage.getItem(LS_KEY); if(t){ const o = JSON.parse(t); return normalize(o);} }catch(e){} return null; }
 function persistLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){} }
 function normalize(o){
   const b = blankState();
   o = Object.assign(b, o||{});
   o.teams = SEEDS.map(s=>{ const t=(o.teams||[]).find(x=>+x.seed===s); return {seed:s,name:(t&&t.name)||("ทีม "+s)}; });
-  for(const m of MATCHES){ const x=(o.matches||{})[m.id]||{}; o.matches[m.id]={time:x.time||"",games:Array.isArray(x.games)?x.games:[]}; }
+  const old=o.matches||{}; o.matches={};
+  for(const m of MATCHES){ const x=old[m.id]||{}; o.matches[m.id]={time:x.time||"",games:Array.isArray(x.games)?x.games:[]}; }
+  o.tb = (o.tb && typeof o.tb==="object") ? o.tb : {};
   return o;
 }
 
@@ -690,6 +713,7 @@ function autoResult(g){
 }
 function gameWinner(g){
   if(g.live && !g.done) return null;
+  if(g.tie && !g.winner) return null;
   if(g.winner) { const a=autoResult(g); return {side:g.winner, method:(a&&a.side===g.winner)?a.method:"Judge"}; }
   return autoResult(g);
 }
@@ -706,15 +730,42 @@ function result(id){
 }
 function resolve(src){
   if(src.seed) return src.seed;
-  if(src.w) return result(src.w).winner;
-  if(src.l) return result(src.l).loser;
+  if(src.g) return place(src.g,src.p);
   return null;
 }
 function srcLabel(src){
-  if(src.seed) return "สาย "+src.seed;
-  if(src.w) return "ผู้ชนะ "+src.w;
-  if(src.l) return "ผู้แพ้ "+src.l;
+  if(src.seed) return "ลำดับ "+src.seed;
+  if(src.g) return "ที่ "+src.p+" สาย "+src.g;
 }
+// ตารางคะแนนในสาย เรียงตาม คู่ที่ชนะ ผลต่างเกม เกมที่ชนะ ผลคู่ที่เจอกัน แล้วกรรมการตัดสิน
+function standings(G){
+  const grp=GROUPS[G], ms=MATCHES.filter(m=>m.grp===G);
+  const rows=grp.teams.map((src,i)=>({i,src,seed:resolve(src),mw:0,ml:0,gw:0,gl:0,mp:0}));
+  const by=s=>rows.find(r=>r.seed!=null&&r.seed===s);
+  let complete=rows.every(r=>r.seed!=null);
+  for(const m of ms){ const R=result(m.id), a=by(R.red), b=by(R.blue);
+    if(a){ a.gw+=R.r; a.gl+=R.b; } if(b){ b.gw+=R.b; b.gl+=R.r; }
+    if(R.win){ const w=by(R.winner), l=by(R.loser); if(w){w.mw++;w.mp++;} if(l){l.ml++;l.mp++;} } else complete=false; }
+  const key=r=>[r.mw,r.gw-r.gl,r.gw];
+  const cmp=(a,b)=>{ const x=key(a),y=key(b); for(let k=0;k<3;k++) if(x[k]!==y[k]) return y[k]-x[k]; return 0; };
+  rows.sort((a,b)=>cmp(a,b)||a.i-b.i);
+  const h2h=(a,b)=>{ const m=ms.find(m=>{ const R=result(m.id); return (R.red===a.seed&&R.blue===b.seed)||(R.red===b.seed&&R.blue===a.seed); }); const R=m&&result(m.id); return R&&R.win? (R.winner===a.seed?-1:1) : 0; };
+  const tb=(S.tb&&S.tb[G])||[];
+  // แบ่งเป็นกลุ่มที่เท่ากัน
+  const out=[]; let i=0;
+  while(i<rows.length){ let j=i+1; while(j<rows.length && cmp(rows[i],rows[j])===0) j++;
+    let cls=rows.slice(i,j), how="";
+    if(cls.length===2){ const h=h2h(cls[0],cls[1]); if(h){ if(h>0) cls.reverse(); how="h2h"; } }
+    if(cls.length>1 && !how && complete && cls.every(r=>tb.includes(r.seed))){ cls.sort((a,b)=>tb.indexOf(a.seed)-tb.indexOf(b.seed)); how="judge"; }
+    cls.forEach(r=>{ r.sure=complete && (cls.length===1||!!how); r.how=cls.length>1?how:""; r.tied=complete&&cls.length>1&&!how; out.push(r); });
+    i=j; }
+  out.forEach((r,k)=>r.pos=k+1);
+  return {G,rows:out,complete,unresolved:complete&&out.some(r=>r.tied)};
+}
+function place(G,p){ const r=standings(G).rows[p-1]; return r&&r.sure? r.seed : null; }
+const isReplay=g=>!!(g&&g.tie&&!g.winner);
+function gameNo(gs,i){ return gs.slice(0,i).filter(x=>!isReplay(x)).length+1; }
+function curGameIdx(gs){ for(let i=0;i<gs.length;i++) if(!gameWinner(gs[i]) && !(gs[i].tie&&!gs[i].winner)) return i; return gs.length; }
 function status(id){
   const x=result(id), played=S.matches[id].games.some(g=>gameWinner(g));
   if(x.win) return "done";
@@ -727,67 +778,42 @@ const STATUS_TH = {done:"จบแล้ว", live:"กำลังแข่ง"
 const $ = id => document.getElementById(id);
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-// ตำแหน่งบนกระดาน (px)
-const QX=440, SX=700, FX=960, CHX=1220, PX=180;
-const QY=[20,150,280,410], PY=530;
-const SY=[(QY[0]+QY[1])/2,(QY[2]+QY[3])/2], FY=(SY[0]+SY[1])/2;
-const BASE_POS = {
-  s1:[0,QY[0]-12], s2:[0,QY[0]+58], s3:[0,QY[1]-12], s4:[0,QY[1]+58],
-  s5:[0,QY[2]-12], s6:[0,QY[2]+58], s7:[0,QY[3]-12], s8:[0,PY-12], s9:[0,PY+58],
-  P1:[PX,PY], Q1:[QX,QY[0]], Q2:[QX,QY[1]], Q3:[QX,QY[2]], Q4:[QX,QY[3]],
-  S1:[SX,SY[0]], S2:[SX,SY[1]], F:[FX,FY], CH:[CHX,FY+8],
-};
-const CANVAS_W=CHX+170, CANVAS_H=PY+58+40+12;
-let POS = {...BASE_POS};
-const CW=210, CH_=94; // card size
+const mcardHTML=m=>{ const R=result(m.id), st=status(m.id);
+  const row=(cls,seed,sc,src,isWin)=>`<div class="side ${cls}${R.win?(isWin?" win":" lost"):""}"><i></i><span class="nm${seed?"":" tbd"}">${seed?esc(teamName(seed)):esc(srcLabel(src))}</span><span class="sc">${R.r+R.b>0?sc:""}</span></div>`;
+  return `<button class="mcard${selected===m.id?" sel":""}" data-m="${m.id}"><div class="mhead"><span><b>${m.id}</b>&nbsp; <span class="pill ${st}">${STATUS_TH[st]}</span></span><span>Bo${m.bo}</span></div>${row("r",R.red,R.r,m.red,R.win==="red")}${row("b",R.blue,R.b,m.blue,R.win==="blue")}</button>`; };
+function groupTable(G,ro){
+  const st=standings(G), adv=GROUPS[G].adv;
+  const body=st.rows.map(r=>{ const q=st.complete&&r.sure&&r.pos<=adv;
+    const nm=r.seed?esc(teamName(r.seed)):`<span class="hint">${esc(srcLabel(r.src))}</span>`;
+    const pv=st.rows[r.pos-2], same=pv&&pv.mw===r.mw&&pv.gw===r.gw&&pv.gl===r.gl&&(r.tied||r.how==="judge");
+    const up=!ro&&st.complete&&same? `<button class="btn small" data-tbup="${G}:${r.seed}" title="กรรมการให้อันดับดีกว่าทีมด้านบน">ขึ้น</button>`:"";
+    return `<tr class="${q?"q":""}${r.tied?" tied":""}"><td class="num">${st.complete&&r.sure?r.pos:"-"}</td><td class="tn">${nm}${q?` <span class="qtag">${GROUPS[G].round==="รอบแรก"?"เข้ารอบ":"ชิงแชมป์"}</span>`:""}${r.how==="judge"?' <span class="hint">กรรมการ</span>':""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td><td>${up}</td></tr>`; }).join("");
+  const note= ro? "" : st.unresolved? `<p class="warnx">อันดับเท่ากันทุกข้อ กด "ขึ้น" ตามที่กรรมการตัดสิน</p>` : (S.tb&&S.tb[G]&&S.tb[G].length? `<p class="hint">ลำดับที่เสมอ ตัดสินโดยกรรมการ <button class="btn small" data-tbclear="${G}">ล้าง</button></p>`:"");
+  return `<table class="gtbl"><thead><tr><th>ที่</th><th>ทีม</th><th>คู่ ชนะ-แพ้</th><th>เกม ได้-เสีย</th><th></th></tr></thead><tbody>${body}</tbody></table>${note}`;
+}
+let BOARD_BUILT=false;
+function buildBoard(){
+  const panel=G=>`<div class="gpanel" data-g="${G}"><h3>สาย ${G}</h3>${GROUPS[G].round==="รอบแรก"?`<div class="gseeds" id="gs${G}"></div>`:""}<div id="gt${G}"></div><div class="gm" id="gm${G}"></div></div>`;
+  $("listView").hidden=false;
+  $("listView").innerHTML=`<section><h3>รอบแรก 3 สาย สายละ 3 ทีม พบกันหมด ที่ 1 และ 2 เข้ารอบ</h3><div class="gwrap">${["A","B","C"].map(panel).join("")}</div></section>
+    <section><h3>รอบสอง 2 สาย สายละ 3 ทีม พบกันหมด ที่ 1 ของแต่ละสายชิงแชมป์</h3><div class="gwrap two">${["D","E"].map(panel).join("")}</div></section>
+    <section><h3>ชิงชนะเลิศ Best of 5</h3><div class="gwrap two"><div id="gmF" class="gm"></div><div id="gChamp"></div></div></section>`;
+  BOARD_BUILT=true;
+}
 function renderBracket(){
-  let html="";
-  for(const m of MATCHES){
-    const [x,y]=POS[m.id], R=result(m.id);
-    const sideRow=(cls,seed,sc,src,isWin)=>{
-      const state = R.win ? (isWin?" win":" lost") : "";
-      return `<div class="side ${cls}${state}"><i></i><span class="nm${seed?"":" tbd"}">${seed?esc(teamName(seed)):esc(srcLabel(src))}</span><span class="sc">${R.r+R.b>0?sc:""}</span></div>`;
-    };
-    html+=`<button class="mcard${selected===m.id?" sel":""}" style="left:${x}px;top:${y}px" data-m="${m.id}">
-      <div class="mhead"><span><b>${m.id}</b>&nbsp; ${esc(m.round)}</span><span>Bo${m.bo}</span></div>
-      ${sideRow("r",R.red,R.r,m.red,R.win==="red")}
-      ${sideRow("b",R.blue,R.b,m.blue,R.win==="blue")}
-    </button>`;
-  }
-  const F=result("F"), [cx,cy]=POS.CH;
-  html+=`<div class="champ" style="left:${cx}px;top:${cy}px"><span class="eyebrow">แชมป์</span><strong>${F.winner?esc(teamName(F.winner)):"-"}</strong></div>`;
-  const p=[];
-  const elbow=(x1,y1,x2,y2,cls="")=>{ const mx=x1+Math.min(30,(x2-x1)/2); p.push(`<path class="${cls}" d="M${x1} ${y1}H${mx}V${y2}H${x2}"/>`); };
-  const live=id=>result(id).win?"live":"";
-  for(const m of MATCHES){
-    const [x,y]=POS[m.id];
-    [["red",47],["blue",73]].forEach(([k,dy])=>{ const src=m[k];
-      if(src.seed){ const [sx,sy]=POS["s"+src.seed]; p.push(`<path class="live" d="M${sx+140} ${sy+20}H${x-24}V${y+dy}H${x}"/>`); }
-      else if(src.w){ const [ax,ay]=POS[src.w]; elbow(ax+CW,ay+CH_/2,x,y+dy,live(src.w)); }
-    });
-  }
-  elbow(FX+CW,FY+CH_/2,CHX,POS.CH[1]+32,live("F"));
-  $("wires").innerHTML=p.join(""); $("cardLayer").innerHTML=html;
+  if(!BOARD_BUILT) buildBoard();
+  for(const G of GIDS){ $("gt"+G).innerHTML=groupTable(G); $("gm"+G).innerHTML=MATCHES.filter(m=>m.grp===G).map(mcardHTML).join(""); }
+  $("gmF").innerHTML=mcardHTML(MBY.F);
+  const F=result("F"); $("gChamp").innerHTML=`<div class="champ"><span class="eyebrow">แชมป์</span><strong>${F.winner?esc(teamName(F.winner)):"-"}</strong></div>`;
 }
 let unlocked=false, picked=null, NARROW=false, REVEAL=null;
 const seedBox=(s,style="")=>{ const hid=REVEAL!=null&&s>REVEAL, pop=REVEAL!=null&&s===REVEAL;
   return `<div class="seed${picked===s?" picked":""}${hid?" hide":""}${pop?" pop":""}" data-slot="${s}" style="${style}"><span class="grip" data-grip="${s}" role="button" tabindex="0" aria-label="ย้ายสาย ${s}">⠿</span><b>${s}</b><input id="seed${s}" data-seed="${s}" value="${hid?"?":esc(teamName(s))}" aria-label="ชื่อทีมสาย ${s}" autocomplete="off"${REVEAL!=null?" readonly":""}></div>`; };
 function renderSeeds(){
-  const html=SEEDS.map(s=>{ const [x,y]=POS["s"+s]; return seedBox(s,`left:${x}px;top:${y}px`); }).join("");
-  if(NARROW){ $("seedLayer").innerHTML=""; const g=$("lvSeeds"); if(g) g.innerHTML=SEEDS.map(s=>seedBox(s)).join(""); }
-  else $("seedLayer").innerHTML=html;
+  if(!BOARD_BUILT) buildBoard();
+  for(const G of ["A","B","C"]) $("gs"+G).innerHTML=GROUPS[G].teams.map(t=>seedBox(t.seed)).join("");
 }
-const ROUNDS=["รอบคัดเลือก","รอบ 8 ทีม","รอบรองชนะเลิศ","ชิงชนะเลิศ"];
-function renderList(){
-  if(!NARROW){ $("listView").innerHTML=""; return; }
-  const card=m=>{ const R=result(m.id);
-    const row=(cls,seed,sc,src,isWin)=>`<div class="side ${cls}${R.win?(isWin?" win":" lost"):""}"><i></i><span class="nm${seed?"":" tbd"}">${seed?esc(teamName(seed)):esc(srcLabel(src))}</span><span class="sc">${R.r+R.b>0?sc:""}</span></div>`;
-    return `<button class="mcard${selected===m.id?" sel":""}" data-m="${m.id}"><div class="mhead"><span><b>${m.id}</b>&nbsp; <span class="pill ${status(m.id)}">${STATUS_TH[status(m.id)]}</span></span><span>Bo${m.bo}</span></div>${row("r",R.red,R.r,m.red,R.win==="red")}${row("b",R.blue,R.b,m.blue,R.win==="blue")}</button>`; };
-  const F=result("F");
-  $("listView").innerHTML=`<section><h3>สายที่จับได้</h3><div class="grid" id="lvSeeds"></div></section>`+
-    ROUNDS.map(r=>`<section><h3>${r}</h3><div class="grid">${MATCHES.filter(m=>m.round===r).map(card).join("")}</div></section>`).join("")+
-    `<section><div class="grid"><div class="champ"><span class="eyebrow">แชมป์</span><strong>${F.winner?esc(teamName(F.winner)):"-"}</strong></div></div></section>`;
-}
+function renderList(){}
 function anyResults(){ return MATCHES.some(m=>S.matches[m.id].games.length); }
 function setLock(open){
   if(open && anyResults()) return;
@@ -803,8 +829,7 @@ function swapSlots(a,b){
 
 function curGame(id){ // index of the game being played now
   const gs=S.matches[id].games, R=result(id); if(R.win) return -1;
-  for(let i=0;i<gs.length;i++) if(!gameWinner(gs[i])) return i;
-  return gs.length;
+  return curGameIdx(gs);
 }
 function gameWarn(g){
   const w=[], lim=S.timerSec||90;
@@ -820,8 +845,8 @@ function renderEditor(){
   const m=MBY[selected], R=result(m.id), st=S.matches[m.id];
   const games=st.games;
   let rowsN = games.length;
-  if(!R.win && rowsN < m.bo) rowsN = Math.max(rowsN+ (games.length && !gameWinner(games[games.length-1])?0:1), 1);
-  rowsN = Math.min(Math.max(rowsN,1), m.bo);
+  if(!R.win){ const last=games[games.length-1]; if(!last || gameWinner(last) || (last.tie&&!last.winner)) rowsN++; }
+  rowsN = Math.max(rowsN,1);
   if(R.win){ let r=0,b=0,k=0; for(;k<games.length;k++){ const w=gameWinner(games[k]); if(w){ w.side==="red"?r++:b++; } if(r>=R.need||b>=R.need){k++;break;} } rowsN=Math.max(k,1); }
   let rows="";
   for(let i=0;i<rowsN;i++){
@@ -833,11 +858,11 @@ function renderEditor(){
     const noLift = secs(g.rl)==null && secs(g.bl)==null;
     const show={rt:rc===3, bt:bc===3, rl:tie, bl:tie, rx:tie&&noLift, bx:tie&&noLift};
     const warns=gameWarn(g);
-    const meth = (g.live&&!g.done)? `<span class="meth need">กำลังแข่ง</span>` : w? `<span class="meth">${METHOD_TH[w.method]}</span>` : (both? `<span class="meth need">เสมอ เลือกผู้ชนะ</span>`:`<span class="meth">-</span>`);
+    const meth = (g.live&&!g.done)? `<span class="meth need">กำลังแข่ง</span>` : w? `<span class="meth">${METHOD_TH[w.method]}</span>` : g.tie? `<span class="meth">เสมอ แข่งใหม่ (FAQ 34)</span>` : (both? `<span class="meth need">เสมอ เลือกผู้ชนะ หรือกดแข่งใหม่</span>`:`<span class="meth">-</span>`);
     const cnt=(k)=>`<select data-k="${k}" aria-label="จำนวนแท่น"><option value="">-</option>${[0,1,2,3].map(v=>`<option value="${v}"${String(g[k]??"")===String(v)?" selected":""}>${v}</option>`).join("")}</select>`;
     const tm=(k,lab)=> (show[k]||String(g[k]??"")!=="") ? `<td><input data-k="${k}" class="tm" inputmode="numeric" placeholder="m:ss" value="${esc(g[k]??"")}" aria-label="${lab}"></td>` : `<td class="na">.</td>`;
     rows+=`<tr data-g="${i}">
-      <td class="num">${i+1}</td>
+      <td class="num">${gameNo(games,i)}</td>
       <td><select data-k="pat" aria-label="แบบสนาม"><option value="">-</option>${["1","2","3"].map(v=>`<option value="${v}"${g.pat===v?" selected":""}>แบบ ${v}</option>`).join("")}</select></td>
       <td>${cnt("rc")}</td>${tm("rt","เวลาครบ แดง")}${tm("rl","ยกแรก แดง")}${tm("rx","ออกกรอบ แดง")}
       <td>${cnt("bc")}</td>${tm("bt","เวลาครบ น้ำเงิน")}${tm("bl","ยกแรก น้ำเงิน")}${tm("bx","ออกกรอบ น้ำเงิน")}
@@ -856,7 +881,7 @@ function renderEditor(){
       <th>เกม</th><th>สนาม</th><th class="r">จอด</th><th class="r">เวลาครบ</th><th class="r">ยกแรก</th><th class="r">ออกกรอบ</th><th class="b">จอด</th><th class="b">เวลาครบ</th><th class="b">ยกแรก</th><th class="b">ออกกรอบ</th><th>ผู้ชนะ</th><th>หมายเหตุ</th>
     </tr></thead><tbody>${rows}</tbody></table></div>
     <p class="hint">ช่องเวลาจะโผล่เมื่อต้องใช้ตัดสิน เวลาครบเมื่อจอด 3 แท่น ยกแรกเมื่อจอดเท่ากัน ออกกรอบเมื่อยังไม่มีใครยกได้</p>`
-    :`<p class="hint">ยังไม่รู้คู่แข่ง รอผล ${[m.red,m.blue].filter(s=>!s.seed).map(s=>s.w||s.l).join(" และ ")} ก่อน</p>`}
+    :`<p class="hint">ยังไม่รู้คู่แข่ง รอ ${[m.red,m.blue].filter(s=>!resolve(s)).map(srcLabel).join(" และ ")} ก่อน</p>`}
   `;
 }
 let liveMsg="";
@@ -873,9 +898,16 @@ function renderLiveInto(el,isRef){
     return `<div class="col ${cls}"><div class="nm">${esc(teamName(side==="red"?R.red:R.blue))}</div>
       <div class="ctl"><span class="cnt"><button data-cnt="${c}c" data-d="-1" aria-label="ลดจำนวนแท่น">-</button><b>${v??0}<small>แท่น</small></b><button data-cnt="${c}c" data-d="1" aria-label="เพิ่มจำนวนแท่น">+</button></span>
       ${stamp("l","ยกแรก")}${stamp("t","ครบ 3")}${stamp("x","ออกกรอบ")}</div></div>`; };
-  el.innerHTML=`<div class="lhead"><span>เกม ${gi+1} จาก Bo${m.bo}</span><span>สนามแบบ</span><span class="seg patseg">${["1","2","3"].map(v=>`<button class="${g.pat===v?"on":""}" data-pat="${v}" aria-pressed="${g.pat===v}">${v}</button>`).join("")}</span>${g.pat?"":'<span class="hint">เลือกแบบสนามที่สุ่มได้</span>'}</div>
+  if(g.done && !gameWinner(g) && !g.tie){
+    const still=[g.rx,g.bx,g.rl,g.bl].every(v=>!v) && !n(g.rc) && !n(g.bc);
+    el.innerHTML=`<div class="lhead"><span>เกม ${gameNo(S.matches[m.id].games,gi)} ผลเท่ากัน</span></div>
+      <p class="hint" style="text-align:center">${still?"ทั้งสองทีมไม่ออกจากกรอบแดง กรรมการเป็นผู้ตัดสิน (FAQ 35)":"ผลเท่ากันทุกอย่าง ให้แข่งใหม่ทันทีด้วยสนามแบบเดิม (FAQ 34)"}</p>
+      <div class="lhead"><button class="btn r" data-judge="red">${esc(teamName(R.red))} ชนะ</button><button class="btn b" data-judge="blue">${esc(teamName(R.blue))} ชนะ</button><button class="btn${still?"":" primary"}" data-replay>แข่งใหม่ สนามแบบ ${g.pat||"เดิม"}</button></div>`;
+    return; }
+  const gno=gameNo(S.matches[m.id].games,gi);
+  el.innerHTML=`<div class="lhead"><span>เกม ${gno} จาก Bo${m.bo}${gi>0&&isReplay(S.matches[m.id].games[gi-1])?" แข่งใหม่":""}</span><span>สนามแบบ</span><span class="seg patseg">${["1","2","3"].map(v=>`<button class="${g.pat===v?"on":""}" data-pat="${v}" aria-pressed="${g.pat===v}">${v}</button>`).join("")}</span>${g.pat?"":'<span class="hint">เลือกแบบสนามที่สุ่มได้</span>'}</div>
     <div class="cols">${col("red","r")}${col("blue","b")}</div>
-    <div class="lhead"><button class="btn primary" data-endgame>จบเกม ${gi+1} และตัดสินผล</button></div>
+    <div class="lhead"><button class="btn primary" data-endgame>จบเกม ${gno} และตัดสินผล</button></div>
     <div class="msg">${esc(liveMsg)}</div>`;
 }
 function endLiveGame(){
@@ -883,7 +915,7 @@ function endLiveGame(){
   const g=S.matches[selected].games[gi];
   if(!g||isEmptyGame(g)){ liveMsg="ยังไม่มีผลของเกมนี้"; renderLive(); return; }
   g.done="1"; if(n(g.rc)==null) g.rc="0"; if(n(g.bc)==null) g.bc="0";
-  liveMsg = gameWinner(g) ? "" : "ผลเสมอ เลือกผู้ชนะในตารางด้านล่าง";
+  liveMsg = "";
   changed(); if(T.mode==="game") tReset();
 }
 function elapsedNow(){ if(T.mode==="setup") return null; const e=T.dur-T.left; return (T.running||T.left<T.dur)&&e>0? e : null; }
@@ -921,8 +953,8 @@ function undoUI(){ document.querySelectorAll("[data-undo]").forEach(b=>b.disable
 function undo(){ if(HIST.length<2) return; HIST.pop(); S=normalize(JSON.parse(HIST[HIST.length-1])); persistLocal(); dirty=true; scheduleSave(); netPush(); render(); }
 function changed(rerender=true){ persistLocal(); dirty=true; scheduleSave(); snap(); netPush(); if(rerender) render(); else undoUI(); }
 function ranking(){
-  const F=result("F"), L=id=>result(id).loser||null;
-  return [[1,F.winner],[2,L("F")],["3=",L("S1")],["3=",L("S2")],["5=",L("Q1")],["5=",L("Q2")],["5=",L("Q3")],["5=",L("Q4")],[9,L("P1")]];
+  const F=result("F"), P=(G,p)=>place(G,p);
+  return [[1,F.winner],[2,F.loser],["3=",P("D",2)],["3=",P("E",2)],["5=",P("D",3)],["5=",P("E",3)],["7=",P("A",3)],["7=",P("B",3)],["7=",P("C",3)]];
 }
 function renderRank(){
   $("rankList").innerHTML=ranking().map(([p,t])=>`<li class="${p===1&&t?"first":""}"><b>${p}</b><span>${t?esc(teamName(t)):'<span class="hint">รอผล</span>'}</span></li>`).join("");
@@ -935,12 +967,13 @@ function renderDash(){
   const m=MBY[selected], R=result(m.id), {gi,g}=liveCounts(m.id);
   const nm=(seed,src)=>seed?esc(teamName(seed)):`<span class="hint">${esc(srcLabel(src))}</span>`;
   const c=(k)=> R.win?"":`<div class="cnt">${n(g[k+"c"])??0} <small>แท่น</small>${g[k+"l"]?` <small>ยกแรก ${esc(g[k+"l"])}</small>`:""}${g[k+"t"]?` <small>ครบ ${esc(g[k+"t"])}</small>`:""}</div>`;
-  $("dNow").innerHTML=`<div class="meta"><span>${m.id}&nbsp; ${esc(m.round)}&nbsp; Best of ${m.bo}</span><span>${R.win?"จบแล้ว":(gi>=0?"เกม "+(gi+1):"")}${g.pat?"&nbsp; สนามแบบ "+g.pat:""}</span></div>
+  $("dNow").innerHTML=`<div class="meta"><span>${m.id}&nbsp; ${esc(m.round)}&nbsp; Best of ${m.bo}</span><span>${R.win?"จบแล้ว":(gi>=0?"เกม "+gameNo(S.matches[m.id].games,gi):"")}${g.pat?"&nbsp; สนามแบบ "+g.pat:""}</span></div>
     <div class="vs"><div class="tm r"><span class="eyebrow">แดง</span><strong>${nm(R.red,m.red)}</strong>${c("r")}</div>
     <div class="mid"><div class="ser">${R.r} - ${R.b}</div><div class="dclock" data-clock>${fmtClock(T.left)}</div><div class="hint" data-phase></div></div>
     <div class="tm b"><span class="eyebrow">น้ำเงิน</span><strong>${nm(R.blue,m.blue)}</strong>${c("b")}</div></div>`;
   const nx=nextMatch(), N=nx&&result(nx);
   $("dNext").innerHTML= nx? `<div class="hint">${nx}&nbsp; ${esc(MBY[nx].round)}</div><div class="dnext">${N.red?esc(teamName(N.red)):"รอผล"} <span class="hint">พบ</span> ${N.blue?esc(teamName(N.blue)):"รอผล"}</div>` : `<div class="hint">ไม่มีคู่ที่รอแข่ง</div>`;
+  if(m.grp) $("dNext").innerHTML+=`<h3 class="dgh">ตารางคะแนน สาย ${m.grp}</h3>${groupTable(m.grp,true)}`;
   const done=MATCHES.filter(x=>status(x.id)==="done").length; $("dProg").textContent=`จบแล้ว ${done} จาก ${MATCHES.length} คู่`;
   $("dSched").innerHTML=MATCHES.map(x=>{ const r=result(x.id); const tn=s=>s?esc(teamName(s)):"รอผล";
     return `<li class="${x.id===selected?"on":""}"><b>${x.id}</b><span>${tn(r.red)} <span class="hint">พบ</span> ${tn(r.blue)}</span><span class="pill ${status(x.id)}">${r.r+r.b>0?r.r+"-"+r.b:STATUS_TH[status(x.id)]}</span></li>`; }).join("");
@@ -962,9 +995,9 @@ function nextMatch(){
 }
 function pickMatch(id){ selected=id; liveMsg=""; S.current=id; changed(); }
 function goNext(){ const id=nextMatch(); if(!id){ liveMsg="ไม่มีคู่ที่พร้อมแข่งแล้ว"; renderLive(); return; } tReset(); pickMatch(id); }
-function gameAt(i){ const gs=S.matches[selected].games; while(gs.length<=i) gs.push({}); return gs[i]; }
+function gameAt(i){ const gs=S.matches[selected].games; while(gs.length<=i){ const p=gs[gs.length-1]; gs.push(p&&p.tie&&!p.winner&&p.pat?{pat:p.pat}:{}); } return gs[i]; }
 function tidyGames(id){ const gs=S.matches[id].games; while(gs.length && isEmptyGame(gs[gs.length-1])) gs.pop(); }
-const isEmptyGame=g=>!g.winner&&!g.pat&&!g.done&&[g.rc,g.rt,g.rl,g.rx,g.bc,g.bt,g.bl,g.bx,g.note].every(v=>v==null||v==="");
+const isEmptyGame=g=>!g.winner&&!g.pat&&!g.done&&!g.tie&&[g.rc,g.rt,g.rl,g.rx,g.bc,g.bt,g.bl,g.bx,g.note].every(v=>v==null||v==="");
 
 document.addEventListener("click",e=>{
   const mc=e.target.closest(".mcard");
@@ -975,7 +1008,7 @@ document.addEventListener("click",e=>{
   if(wb){ const i=+wb.closest("tr").dataset.g, g=gameAt(i), side=wb.dataset.win;
     const cur=gameWinner(g);
     if(g.live && !g.done) g.done="1";
-    if(g.winner===side) g.winner=""; else if(cur && cur.side===side && !g.winner) g.winner=""; else g.winner=side;
+    if(g.winner===side) g.winner=""; else if(cur && cur.side===side && !g.winner) g.winner=""; else { g.winner=side; g.tie=""; }
     // if manual pick equals auto result, drop the override
     const a=autoResult(g); if(a && g.winner===a.side) g.winner="";
     if(!g.winner && !a && cur && cur.side===side) {/* toggled off */}
@@ -986,6 +1019,14 @@ document.addEventListener("click",e=>{
   if(e.target.closest("[data-undo]")){ undo(); return; }
   if(e.target.closest("[data-next]")||e.target.id==="bNext"){ goNext(); return; }
   if(e.target.closest("[data-endgame]")){ endLiveGame(); return; }
+  const jb=e.target.closest("[data-judge]");
+  if(jb){ const gi=curGame(selected); if(gi<0) return; const g=gameAt(gi); g.winner=jb.dataset.judge; g.tie=""; changed(); return; }
+  if(e.target.closest("[data-replay]")){ const gi=curGame(selected); if(gi<0) return; const g=gameAt(gi); g.tie="1"; g.winner=""; g.note=g.note||"เสมอ แข่งใหม่"; gameAt(gi+1); changed(); if(T.mode==="game") tReset(); return; }
+  const tu=e.target.closest("[data-tbup]");
+  if(tu){ const [G,sd]=tu.dataset.tbup.split(":"), order=standings(G).rows.map(r=>r.seed), k=order.indexOf(+sd);
+    if(k>0){ [order[k-1],order[k]]=[order[k],order[k-1]]; S.tb[G]=order; changed(); } return; }
+  const tc=e.target.closest("[data-tbclear]");
+  if(tc){ delete S.tb[tc.dataset.tbclear]; changed(); return; }
   const pb=e.target.closest("[data-pat]");
   if(pb){ const v=pb.dataset.pat; liveEdit(g=>{ g.pat = g.pat===v ? "" : v; }); return; }
   const cb=e.target.closest("[data-cnt]");
@@ -1031,18 +1072,7 @@ if(!document.documentElement.requestFullscreen) document.querySelectorAll(".fsbt
 document.querySelectorAll(".fsbtn").forEach(b=>b.onclick=()=>{ if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else document.documentElement.requestFullscreen?.().catch(()=>{}); });
 document.addEventListener("fullscreenchange",()=>{ document.querySelectorAll(".fsbtn").forEach(b=>b.textContent=document.fullscreenElement?"ออกจากเต็มจอ":"เต็มจอ"); setTimeout(fitBracket,50); });
 /* scale the bracket to fill the screen */
-function fitBracket(){
-  const board=document.querySelector(".board"); if(!board||!board.offsetParent) return;
-  const narrow = board.clientWidth < 760 || board.clientWidth/(CANVAS_W+10) < 0.6;
-  if(narrow!==NARROW){ NARROW=narrow; $("listView").hidden=!narrow; document.querySelector(".scroller").hidden=narrow; render(); }
-  if(NARROW) return;
-  const sc=document.querySelector(".scroller"), c=$("canvas");
-  const availW=sc.clientWidth, top=sc.getBoundingClientRect().top+window.scrollY;
-  const availH=Math.max(300, window.innerHeight-top-34);
-  let z=Math.min(availW/(CANVAS_W+10), availH/(CANVAS_H+10)); z=Math.max(0.5, Math.min(z,2));
-  c.style.zoom=z; c.style.width=CANVAS_W+"px"; c.style.height=CANVAS_H+"px";
-}
-window.addEventListener("resize",fitBracket);
+function fitBracket(){ if(!BOARD_BUILT) buildBoard(); }
 /* title input: size to its text */
 function fitTitle(){
   const el=$("evTitle"), cs=getComputedStyle(el), cv=fitTitle.c||(fitTitle.c=document.createElement("canvas")), ctx=cv.getContext("2d");
@@ -1058,7 +1088,7 @@ let drag=null;
 document.addEventListener("pointerdown",e=>{
   const g=e.target.closest("[data-grip]"); if(!g||!unlocked) return;
   e.preventDefault(); const box=g.closest(".seed");
-  drag={slot:+g.dataset.grip, box, x0:e.clientX, y0:e.clientY, moved:false, over:null, z:parseFloat(getComputedStyle($("canvas")).zoom)||1};
+  drag={slot:+g.dataset.grip, box, x0:e.clientX, y0:e.clientY, moved:false, over:null, z:1};
   g.setPointerCapture(e.pointerId);
 });
 document.addEventListener("pointermove",e=>{
@@ -1113,14 +1143,18 @@ function buildWorkbook(){
     sched.push([m.id,m.round,"Bo"+m.bo,R.red?teamName(R.red):srcLabel(m.red),R.blue?teamName(R.blue):srcLabel(m.blue),R.r,R.b,R.winner?teamName(R.winner):"",STATUS_TH[status(m.id)]]);
     S.matches[m.id].games.forEach((g,k)=>{
       const w=gameWinner(g); const team=w?(w.side==="red"?R.red:R.blue):null;
-      games.push([m.id,k+1,num(g.rc),g.rt||"",g.rl||"",g.rx||"",num(g.bc),g.bt||"",g.bl||"",g.bx||"",g.pat||"",w?(w.side==="red"?"Red":"Blue"):"",team?teamName(team):"",w?w.method:"",g.note||""]);
+      games.push([m.id,k+1,num(g.rc),g.rt||"",g.rl||"",g.rx||"",num(g.bc),g.bt||"",g.bl||"",g.bx||"",g.pat||"",w?(w.side==="red"?"Red":"Blue"):(g.tie?"Replay":""),team?teamName(team):"",w?w.method:"",g.note||""]);
     });
   });
   const rank=[["Place","Team"],...ranking().map(([p,t])=>[p,t?teamName(t):""])];
+  const grp=[["Group","Place","Team","Match W","Match L","Games W","Games L"]];
+  for(const G of GIDS) for(const r of standings(G).rows) grp.push([G,r.sure?r.pos:"",r.seed?teamName(r.seed):srcLabel(r.src),r.mw,r.ml,r.gw,r.gl]);
+  info.push(["Tiebreak",JSON.stringify(S.tb||{})]);
   const add=(name,aoa,w)=>{ const ws=XLSX.utils.aoa_to_sheet(aoa); ws["!cols"]=w.map(x=>({wch:x})); XLSX.utils.book_append_sheet(wb,ws,name); };
   add("Matches",sched,[7,18,8,22,22,9,9,22,12]);
   add("Games",games,[7,6,10,12,12,10,10,12,12,10,8,11,22,9,24]);
   add("Teams",teams,[6,30]);
+  add("Groups",grp,[7,7,28,9,9,9,9]);
   add("Ranking",rank,[7,30]);
   add("Info",info,[12,40]);
   return wb;
@@ -1131,7 +1165,8 @@ function readWorkbook(buf){
   const rows=name=>wb.Sheets[name]?XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:""}):null;
   const st=blankState();
   const info=rows("Info"); if(info) for(const r of info){ const k=String(r.Key).trim(), v=r.Value;
-    if(k==="Event"&&v) st.event=String(v); if(k==="TimerSeconds"&&+v>0) st.timerSec=+v; }
+    if(k==="Event"&&v) st.event=String(v); if(k==="TimerSeconds"&&+v>0) st.timerSec=+v;
+    if(k==="Tiebreak"&&v){ try{ st.tb=JSON.parse(v); }catch(e){} } }
   const teams=rows("Teams"); if(teams) for(const r of teams){ const s=+r.Seed; const t=st.teams.find(x=>x.seed===s); if(t && String(r.Team).trim()) t.name=String(r.Team).trim(); }
   const games=rows("Games"); if(games){
     for(const r of games){ const id=String(r.Match).trim(); if(!st.matches[id]) continue;
@@ -1139,6 +1174,7 @@ function readWorkbook(buf){
       const side=v=>{ v=String(v||"").trim().toLowerCase(); return (v==="red"||v==="แดง"||v==="r")?"red":(v==="blue"||v==="น้ำเงิน"||v==="b")?"blue":""; };
       const g={rc:String(r["Red Parked"]??""),rt:fmtTime(r["Red Full Time"]),rl:fmtTime(r["Red First Lift"]),rx:fmtTime(r["Red Exit"]),
         bc:String(r["Blue Parked"]??""),bt:fmtTime(r["Blue Full Time"]),bl:fmtTime(r["Blue First Lift"]),bx:fmtTime(r["Blue Exit"]),pat:String(r.Pattern??""),note:String(r.Note??"")};
+      if(String(r["Winner Side"]).trim().toLowerCase()==="replay") g.tie="1";
       const ws=side(r["Winner Side"]); const a=autoResult(g); g.winner=(ws && (!a || a.side!==ws))?ws:"";
       if(!ws && a===null) g.winner="";
       st.matches[id].games[k]=g;
