@@ -86,7 +86,7 @@ function loginView(err) {
     ${err ? `<p class="err">${esc(err)}</p>` : ""}
     <button class="btn primary big" id="go">Sign in</button>${netBadge()}</div>`;
   const go = async () => { const v = $("pin").value.trim(); if (!v) return; try { if (await rpc("a2_ref_login", { p_pin: v })) { pin = v; L("a2pin", v); claim(); } else loginView("PIN ไม่ถูกต้อง"); } catch (e) { loginView(e.message); } };
-  $("go").onclick = go; $("pin").onkeydown = (e) => e.key === "Enter" && go(); $("pin").focus();
+  $("go").onclick = go; $("pin").onkeydown = (e) => { if (e.key === "Enter") go(); }; // block body: returning false from onkeydown cancels the key $("pin").focus();
 }
 function waitingView() {
   const nx = matches().filter((m) => m.status === "ready").sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no)[0];
