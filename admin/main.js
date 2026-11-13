@@ -267,7 +267,7 @@ function layMock(k) {
     info: `<div class="mk-i"><span>Group stage</span><span>Group <b>A</b></span><span>Match <b>A1</b></span><span>Game <b>1 of 3</b></span>${rules ? `<span>Pattern <b>2</b></span>` : ""}</div>`,
     red: tm("red", "Sample Team A", 1), blue: tm("blue", "Sample Team B", 0),
     clock: `<div class="mk-c">${rules ? `<div class="t">1:30.0</div><div class="p">Running</div>` : `<div class="t">1-0</div><div class="p">Game 1 of 3</div>`}</div>`,
-    bracket: `<div class="mk-b">${[0, 1, 2].map((c) => `<div>${Array.from({ length: 4 >> c }, () => `<i></i>`).join("")}</div>`).join("")}</div>`,
+    bracket: `<div class="mk-b">${bracketHtml({ dark: true })}</div>`,
     upnext: `<div class="mk-u"><h3>Up next</h3><div><b>A2</b><span>Team C vs Team D</span></div><div><b>B1</b><span>Team E vs Team F</span></div><div><b>B2</b><span>Team G vs Team H</span></div></div>`,
   }[k];
 }
@@ -275,7 +275,13 @@ function paintLay() {
   const el = $("lay"); if (!el || !lay) return;
   el.innerHTML = PANELS.filter(([k]) => lay[k].on).map(([k]) => { const p = lay[k];
     return `<div class="lbx lbx-${k}" data-lk="${k}" style="left:${(p.x / STAGE.w) * 100}%;top:${(p.y / STAGE.h) * 100}%;width:${(p.w / STAGE.w) * 100}%;height:${(p.h / STAGE.h) * 100}%">${layMock(k)}<div class="ltag"><b>${LAB[k]}</b><span>${p.w}×${p.h}</span></div><i data-rs="${k}" title="Resize"></i></div>`; }).join("") + `<div class="lhead">Header (fixed)</div>`;
+  el.style.setProperty("--sc", el.clientWidth / STAGE.w); fitLayBracket();
   document.querySelectorAll("[data-layon]").forEach((c) => (c.checked = lay[c.dataset.layon].on));
+}
+// Real bracket scaled the same way the Dashboard does: fit the panel width and height (minus 8px padding each side)
+function fitLayBracket() {
+  const el = $("lay"), bk = el && el.querySelector(".mk-b [data-bk]"); if (!bk) return;
+  bk.dataset.maxh = Math.max(1, (lay.bracket.h - 16) * (el.clientWidth / STAGE.w)); fitBrackets(el);
 }
 document.addEventListener("pointerdown", (e) => {
   const box = e.target.closest("[data-lk]"); if (!box || !lay) return;
@@ -290,6 +296,7 @@ document.addEventListener("pointermove", (e) => {
   else { p.x = Math.max(0, Math.min(STAGE.w - o.w, snap(o.x + dx))); p.y = Math.max(0, Math.min(STAGE.h - o.h, snap(o.y + dy))); }
   const st = drag.el.style; st.left = (p.x / STAGE.w) * 100 + "%"; st.top = (p.y / STAGE.h) * 100 + "%"; st.width = (p.w / STAGE.w) * 100 + "%"; st.height = (p.h / STAGE.h) * 100 + "%";
   drag.el.querySelector(".ltag span").textContent = p.w + "×" + p.h;
+  if (drag.k === "bracket" && drag.rs) fitLayBracket();
 });
 document.addEventListener("pointerup", () => (drag = null));
 document.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.layon && lay) { lay[e.target.dataset.layon].on = e.target.checked; paintLay(); } });
