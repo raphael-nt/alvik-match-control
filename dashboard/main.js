@@ -29,12 +29,9 @@ function mode() {
 function liveView() {
   const o = onField(); if (!o) return bracketView();
   const { f, m } = o, g = openGame(m.code) || gamesOf(m.code).slice(-1)[0], rules = event().rules_mode !== false;
-  const ms = g ? marksOf(g.id).filter((x) => !x.voided) : [], one = (k) => ms.find((x) => x.kind === k);
-  const ev = (x, s) => (x && (x.side === s || x.side === "both") ? `<b>${fmtMs1(x.t_ms)}</b>` : x ? "-" : "waiting");
   const gn = g ? gameNo(m.code, g) : 1, L = liveLayout(event().dash_layout?.live);
-  const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="k">${s.toUpperCase()}</div><div class="n">${esc(sideName(m, s))}</div><div class="w">${m[s + "_wins"]}</div>
-    ${rules ? `<div class="pk">${[1, 2, 3].map((i) => `<i class="${g && i <= g[s + "_parked"] ? "on" : ""}"></i>`).join("")}</div>
-    <div class="ev"><span>Left red box first ${ev(one("exit_first"), s)}</span><span>First lift ${ev(one("lift_first"), s)}</span><span>Retries ${g ? g[s + "_retries"] || 0 : 0}</span></div>` : ""}</div>`;
+  // Team panels show the team name only
+  const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
   const body = {
     info: `<div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
