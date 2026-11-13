@@ -13,7 +13,7 @@ useDims(FULL);
 function columns() {
   const cols = [], gs = groups();
   ["r1", "r2"].forEach((st) => { const l = gs.filter((g) => g.stage === st); if (l.length) cols.push(l.map((g) => ({ kind: "g", g, n: (g.srcs || []).length }))); });
-  KO_ORDER.forEach((st) => { const l = matches().filter((m) => m.stage === st); if (l.length) cols.push(l.map((m) => ({ kind: "m", m, n: 2 }))); });
+  KO_ORDER.forEach((st) => { const l = matches().filter((m) => m.stage === st || (st === "final" && m.stage === "third")).sort((a, b) => (a.stage === "third") - (b.stage === "third")); if (l.length) cols.push(l.map((m) => ({ kind: "m", m, n: 2 }))); });
   return cols;
 }
 function layout() {
@@ -39,8 +39,8 @@ function chipHtml(m, clickable) {
 }
 function boxHtml(b, clickable) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
-  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.code) : "Group " + b.g.grp;
-  const sub = isM ? `${STAGE_EN[b.m.stage] && b.m.stage !== "final" ? STAGE_EN[b.m.stage] + " · " : ""}Bo${b.m.bo}` : STAGE_EN[b.g.stage] || "";
+  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : "Group " + b.g.grp;
+  const sub = isM ? `${STAGE_EN[b.m.stage] && b.m.stage !== "final" && b.m.stage !== "third" ? STAGE_EN[b.m.stage] + " · " : ""}Bo${b.m.bo}` : STAGE_EN[b.g.stage] || "";
   const rh = rowsOf(b).map((r) => {
     const up = isM ? r.win : r.sure && r.pos <= adv, out = isM ? r.lose : r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);
     return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>absent</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
@@ -57,10 +57,12 @@ function wires(boxes) {
   const from = (src, k) => {
     if (src.g && boxes["g:" + src.g]) { const sb = boxes["g:" + src.g], sr = tableOf(src.g)[src.p - 1]; return { x: sb.x + sb.w, y: rowY(sb, src.p - 1), on: !!(sr && sr.sure) }; }
     if (src.w && boxes["m:" + src.w]) { const sb = boxes["m:" + src.w], m = match(src.w); return { x: sb.x + sb.w, y: sb.y + HH + RH, on: !!(m && m.winner_seed != null) }; }
+    // Loser of a match (3rd place): same column as the target, so the line leaves from the bottom of the semifinal box
+    if (src.l && boxes["m:" + src.l]) { const sb = boxes["m:" + src.l], m = match(src.l); return { x: sb.x + sb.w, y: sb.y + sb.h - CH / 2, on: !!(m && m.winner_seed != null) }; }
     return null;
   };
   Object.values(boxes).forEach((b, bi) => {
-    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on, src.g || src.w); });
+    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on, src.g || src.w || "L" + src.l); });
     else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on, src.g || src.w); }); }
   });
   // Every wire in a column gap gets its own vertical lane so lines never run on top of each other

@@ -103,3 +103,7 @@ dialog::backdrop{background:#16191Bb0}
 /* Documents list */
 .doclist{display:grid;gap:8px;margin-top:12px}.docrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .top .fsb{display:inline-grid;place-items:center;padding:4px 8px}
+/* Format editor */
+.fmtc .fg{margin-top:12px;max-width:520px}.fmtc .fg input{width:80px}
+.fmtc .h3{margin:14px 0 6px;font-weight:600}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}.slots .pr{display:flex;gap:8px;align-items:center}.slots select{flex:1;min-width:0}
