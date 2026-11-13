@@ -1,5 +1,5 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
-import { useMarks, connect, onChange, paintNet, rpc, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
+import { useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 // Fullscreen button shows only where the browser supports it (not on iPhone Safari)
@@ -65,7 +65,10 @@ function undo(g) {
   if (qi >= 0) { Q.splice(qi, 1); saveQ(); render(true); } else enqueue("a2_ref_undo", { p_id: last.id });
   vib();
 }
-async function call(fn, args) { try { const r = await rpc(fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...args }); vib(); return r; } catch (e) { if (e.code === "forbidden") { ctl = null; claim(); } toast(e.message || "ส่งไม่สำเร็จ", true); throw e; } }
+// Clock and flow actions re-read the data right away: realtime updates can arrive seconds late,
+// and a stale screen makes the referee tap twice
+const FLOW = new Set(["a2_ref_stop", "a2_ref_setup", "a2_ref_go", "a2_ref_false_start", "a2_ref_confirm", "a2_ref_judge", "a2_ref_pattern", "a2_ref_check"]);
+async function call(fn, args) { try { const r = await rpc(fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...args }); vib(); if (FLOW.has(fn)) loadAll().catch(() => {}); return r; } catch (e) { if (e.code === "forbidden") { ctl = null; claim(); } toast(e.message || "ส่งไม่สำเร็จ", true); throw e; } }
 
 // ---------- Referee device claim ----------
 async function claim() {
