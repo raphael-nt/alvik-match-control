@@ -24,3 +24,5 @@
 .bk-champ{position:absolute;border:2px solid var(--bk-edge);border-radius:8px;padding:8px 14px;display:flex;flex-direction:column;gap:0;background:var(--bk-box)}
 .bk-champ span{font-size:14px;color:var(--bk-mute)}.bk-champ b{font-size:24px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bk-champ.has{border-color:var(--bk-champ);background:var(--bk-champ);color:#16191B}.bk-champ.has span{color:#16191B}
+/* Compact bracket for short panels: tighter header, no match chips */
+.bk.compact .bk-c{display:none}.bk.compact .bk-h{line-height:30px}.bk.compact .bk-h b{font-size:18px}

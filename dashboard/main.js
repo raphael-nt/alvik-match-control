@@ -39,7 +39,7 @@ function liveView() {
     info: `<div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
-    bracket: `<div class="bkarea">${bracketHtml({ dark: true, maxh: L.bracket.h - 16 })}</div>`,
+    bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16 })}</div>`,
     upnext: upNextHtml(),
   };
   return `${head("● LIVE")}${Object.entries(L).filter(([, p]) => p.on).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
