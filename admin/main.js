@@ -254,8 +254,13 @@ function tvView() {
 function settingsView() {
   const ev = event(), base = new URL("../", location.href).href;
   const link = (p, t, d) => `<div class="lk"><div data-qr="${base}${p}/"></div><div><b>${t}</b><div class="muted">${d}</div><code>${base}${p}/</code><div class="btns"><button class="btn small" data-act="copy" data-u="${base}${p}/">คัดลอกลิงก์</button><a class="btn small" style="text-decoration:none" href="${base}${p}/" target="_blank" rel="noopener">เปิด</a></div></div></div>`;
-  return `<div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>Event</h2></div><div class="form">
-     <label>ชื่องาน<input id="en" value="${esc(ev.name)}" maxlength="80"></label>
+  return `<div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>Name</h2></div><div class="form">
+     <label>ชื่องาน แสดงบนหัว Dashboard และหน้าแอดมิน<input id="en" value="${esc(ev.name)}" maxlength="80"></label>
+     <button class="btn primary" data-act="savename">Save name</button></div></div>
+    <div class="card"><div class="h2"><h2>Smart Logistics Challenge mode</h2><span class="pill ${ev.rules_mode !== false ? "ready" : "locked"}">${ev.rules_mode !== false ? "On" : "Off"}</span></div>
+     <p class="muted" style="margin:0 0 10px">${ev.rules_mode !== false ? "เปิด: กรรมการใช้ Setup, Checklist, นาฬิกา 1:30 และกดเกณฑ์ตามกติกาข้อ 6" : "ปิด: กรรมการกดแค่ว่าใครชนะแต่ละเกม ไม่มีนาฬิกาและ Checklist"}</p>
+     <label class="switch"><input type="checkbox" id="rm" ${ev.rules_mode !== false ? "checked" : ""}><span></span><b>Use Smart Logistics Challenge rules</b></label></div>
+    <div class="card"><div class="h2"><h2>Timing</h2><span>ใช้เมื่อเปิดโหมดกติกา</span></div><div class="form">
      <div class="two"><label>เวลา Setup (วินาที)<input id="es" type="number" min="0" value="${Math.round(ev.setup_ms / 1000)}"></label><label>เวลาแข่งต่อเกม (วินาที)<input id="eg" type="number" min="10" value="${Math.round(ev.game_ms / 1000)}"></label></div>
      <label>นับถอยหลังก่อน GO (วินาที)<input id="ec" type="number" min="0" max="10" value="${Math.round((ev.countdown_ms ?? 3000) / 1000)}"></label>
      <button class="btn primary" data-act="saveev">Save</button></div></div>
@@ -363,8 +368,9 @@ const H = {
   async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "Draw started"); formTab = ""; render(); },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "Dashboard on Auto"); formTab = ""; render(); },
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "Dashboard mode changed"); },
+  async savename() { const name = $("en").value.trim(); if (!name) return toast("ใส่ชื่องานก่อน", true); await act(() => adm("a2_adm_event", { p: { name } }), "Name saved"); },
   async saveev() {
-    const p = { name: $("en").value.trim(), setup_ms: Math.max(0, +$("es").value) * 1000, game_ms: Math.max(10, +$("eg").value) * 1000, countdown_ms: Math.max(0, Math.min(10, +$("ec").value)) * 1000 };
+    const p = { setup_ms: Math.max(0, +$("es").value) * 1000, game_ms: Math.max(10, +$("eg").value) * 1000, countdown_ms: Math.max(0, Math.min(10, +$("ec").value)) * 1000 };
     await act(() => adm("a2_adm_event", { p }), "บันทึกแล้ว");
   },
   async savepw() {
@@ -385,7 +391,14 @@ const H = {
 };
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); if (!b || b.disabled) return; const f = H[b.dataset.act]; if (f) f(b); });
 document.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
-document.addEventListener("change", (e) => { if (e.target.id === "lgf") { logF = e.target.value; redraw(); } });
+document.addEventListener("change", async (e) => {
+  if (e.target.id === "lgf") { logF = e.target.value; redraw(); }
+  if (e.target.id === "rm") {
+    const on = e.target.checked, f = field(1), busy = f && f.match_code && ["setup", "ready", "countdown", "game", "stopped", "over"].includes(f.phase);
+    if (busy && !confirm("มีเกมกำลังดำเนินอยู่ เปลี่ยนโหมดตอนนี้ กรรมการจะเห็นหน้าใหม่ทันที")) { e.target.checked = !on; return; }
+    if ((await act(() => adm("a2_adm_event", { p: { rules_mode: on } }), on ? "Rules mode on" : "Rules mode off")) === undefined) e.target.checked = !on; else { formTab = ""; render(); }
+  }
+});
 document.addEventListener("input", (e) => { if (e.target.matches("[data-fmt]")) { const el = $("fsum"); if (el) el.innerHTML = fmtSummary(readFormat()); } });
 document.addEventListener("change", async (e) => {
   const c = e.target.closest("[data-abs]"); if (!c) return;
