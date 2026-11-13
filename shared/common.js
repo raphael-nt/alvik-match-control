@@ -175,3 +175,13 @@ export function decideV3(g) {
 }
 export const RULE_EN = { full: "Rule 6.1 mission complete", count: "Rule 6.2 more stands parked", lift: "Rule 6.3 first lift", exit: "Rule 6.4 left red box first", judge: "Referee decision (FAQ 35)" };
 export const RULE_TH = { full: "ทำภารกิจครบ 3 แท่นก่อน (6.1)", count: "จอดแท่นได้มากกว่าเมื่อหมดเวลา (6.2)", lift: "ยกแท่นแรกได้ก่อน (6.3)", exit: "ออกพ้นกรอบแดงก่อน (6.4)", judge: "กรรมการตัดสิน (FAQ 35)" };
+
+// ---------- Fullscreen (Admin, Dashboard, Referee) ----------
+export const fsSupported = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+export const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+export function toggleFs() {
+  const d = document, el = d.documentElement;
+  if (isFs()) return (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  return (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+}
+export const FS_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`;
