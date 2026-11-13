@@ -1,6 +1,6 @@
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
-import { listDocs, openDoc, fileToB64, docRows } from "../shared/docs.js";
+import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { build as buildFormat, validate as validateFormat, defaults as fmtDefaults, STAGE_EN } from "../shared/format.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
@@ -467,7 +467,7 @@ document.addEventListener("click", (e) => { const b = e.target.closest("[data-ac
 document.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
 document.addEventListener("click", async (e) => {
   const o = e.target.closest("[data-doc]"), d = e.target.closest("[data-docdel]");
-  if (o) openDoc(+o.dataset.doc, { p_pw: pw }).catch((x) => toast(x.message, true));
+  if (o) showDoc(+o.dataset.doc, { p_pw: pw }, o.dataset.t);
   if (d && confirm(`ลบเอกสาร ${d.dataset.t}`)) { if ((await act(() => adm("a2_adm_doc_del", { p_id: +d.dataset.docdel }), "Deleted")) !== undefined) loadDocs(); }
 });
 document.addEventListener("change", async (e) => {
