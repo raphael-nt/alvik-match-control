@@ -65,3 +65,11 @@ section h3 small{font-weight:400;color:var(--muted);font-size:14px}
 .bkbox{padding:8px;touch-action:pan-x pan-y}.bkbox .bk{overflow:visible;margin:0 auto}.bkbox .bk-stage{transform-origin:0 0}
 .zm{display:flex;align-items:center;gap:6px;font-size:14px}.zm span{min-width:44px;text-align:center}.ib.dark{font-size:22px;font-weight:700;line-height:1}
 .docrow{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+/* Tap-to-stop clock, KNOCKOUT tag, confirm popup, fewer touch delays and zoom glitches */
+html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.clock.tap{display:block;width:100%;background:transparent;border:0;color:inherit;font:inherit;cursor:pointer;padding:6px 0;border-radius:12px}
+.clock.tap:active{background:#0001}
+.ko{display:block;font-style:normal;font-size:13px;font-weight:800;letter-spacing:.08em;background:var(--tape);color:#16191B;border-radius:6px;padding:1px 6px;margin-top:2px}
+.ask{align-items:center;justify-content:center;padding:20px}
+.ask-card{background:#fff;color:#16191B;border-radius:14px;padding:20px;max-width:420px;width:100%;display:grid;gap:12px}
+.ask-card h3{margin:0;font-size:22px}.ask-card p{margin:0;color:#5D6663}

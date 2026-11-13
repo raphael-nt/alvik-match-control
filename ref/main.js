@@ -2,6 +2,8 @@
 import { useMarks, connect, onChange, paintNet, rpc, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
+// Fullscreen button shows only where the browser supports it (not on iPhone Safari)
+const fsOk = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 
 useMarks();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -58,7 +60,7 @@ function mark(g, kind, side) {
   vib(); if (kind === "complete") beep(520, 600); else beep(990, 60);
 }
 function undo(g) {
-  const ms = marksView(g.id); const last = ms[ms.length - 1]; if (!last) return;
+  const ms = marksView(g.id).filter((x) => x.kind !== "complete"); const last = ms[ms.length - 1]; if (!last) return;
   const qi = Q.findIndex((i) => i.fn === "a2_ref_mark" && i.args.p_id === last.id);
   if (qi >= 0) { Q.splice(qi, 1); saveQ(); render(true); } else enqueue("a2_ref_undo", { p_id: last.id });
   vib();
@@ -75,9 +77,9 @@ async function claim() {
 async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => (wake = null)); } } catch (e) {} }
 
 // ---------- Components ----------
-const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
+const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${fsOk ? `<button class="ib" data-fs aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>` : ""}${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
 const teams = (m) => `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, "red"))}</b><em>${m.red_wins}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, "blue"))}</b><em>${m.blue_wins}</em></div></div>`;
-const clockBox = () => `<div class="clock" id="clock"><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></div>`;
+const clockBox = () => `<button type="button" class="clock tap" id="clock" data-stop><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></button>`;
 const sideBtns = (key, both) => `<div class="pair"><button class="btn red big" data-mk="${key}" data-s="red">RED</button><button class="btn blue big" data-mk="${key}" data-s="blue">BLUE</button></div>${both ? `<button class="btn same" data-mk="${key}" data-s="both">Same time</button>` : ""}`;
 const sideTxt = (s) => (s === "both" ? "Same time" : s === "red" ? "RED first" : "BLUE first");
 
@@ -111,7 +113,7 @@ function matchView(f, m, g) {
     body = `<section><h3>Field pattern</h3><div class="pat">${[1, 2, 3].map((n) => `<button class="btn${g.pattern === n ? " on" : ""}" data-pat="${n}" ${replay ? "disabled" : ""}>${n}</button>`).join("")}<button class="btn" data-pat="r" ${replay ? "disabled" : ""}>Random</button></div>
       ${replay ? `<p class="muted">เกมแข่งใหม่ ใช้แบบสนามเดิม (FAQ 34)</p>` : `<p class="muted">สุ่มก่อนเริ่ม Setup สองทีมใช้แบบเดียวกัน (2.3)</p>`}</section>
       <button class="btn primary big" data-fl="start" ${g.pattern ? "" : "disabled"}>Start setup ${fmtMs(event().setup_ms)}</button>
-      <div class="row"><button class="btn" data-fl="skip" ${g.pattern ? "" : "disabled"}>Skip setup</button><button class="btn" id="absent">Team absent</button></div>
+      <div class="row"><button class="btn" id="absent">Team absent</button></div>
       ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บายฝั่ง ${m.absent_req.toUpperCase()} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}`;
   } else if (ph === "setup" || ph === "ready") {
     const c = f.checks || {}, all = c.red_in && c.blue_in && c.stands;
@@ -120,9 +122,8 @@ function matchView(f, m, g) {
       ${ck1("red_in", "Red robot fully inside red box", "ทุกส่วนอยู่ในกรอบแดง ทับเส้นได้ (FAQ 3)")}
       ${ck1("blue_in", "Blue robot fully inside red box", "ทุกส่วนอยู่ในกรอบแดง ทับเส้นได้ (FAQ 3)")}
       ${ck1("stands", `Stands placed as pattern ${g.pattern}, both sides`, "กลางแท่นตรงจุด ขอบขนานเส้นสนาม (FAQ 4)")}</section>
-      ${ph === "setup" ? `<button class="btn" data-fl="skip">Skip setup</button>` : ""}
       <button class="btn primary huge" id="go" ${ph === "ready" && all ? "" : "disabled"}>Start</button>
-      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ</p>` : ""}`;
+      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด Setup แตะอีกครั้งเพื่อข้าม</p>` : ""}`;
   } else if (ph === "countdown") {
     body = `<div class="count" id="count">3</div><button class="btn danger hold" data-hold="false_start">False start (hold)<i></i></button>`;
   } else if (ph === "game") {
@@ -148,6 +149,8 @@ function simpleView(m, g) {
   const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
 }
 
+// KNOCKOUT tag when a side has 3 stands parked or was given Mission complete
+const ko = (s, side) => (s[side + "_parked"] >= 3 || s.complete_side === side || s.complete_side === "both" ? `<em class="ko">KNOCKOUT</em>` : "");
 function liveBody(g) {
   const s = summary(g);
   const row = (no, title, rule, hint, key, done, both) => `<section class="crit${done ? " done" : ""}"><h3><span>${no}</span>${title} <small>(${rule})</small></h3>${hint ? `<p class="hint">${hint}</p>` : ""}
@@ -158,12 +161,12 @@ function liveBody(g) {
     ${row(1, "Left red box first", "5.3", "ทุกส่วนพ้นกรอบแดง", "exit_first", s.exit, true).replace('class="crit', `class="crit${next === 1 ? " next" : ""}`)}
     ${row(2, "First lift", "5.1", "4 legs off the floor", "lift_first", s.lift, true).replace('class="crit', `class="crit${next === 2 ? " next" : ""}`)}
     <section class="crit${next === 3 ? " next" : ""}"><h3><span>3</span>Stands parked now <small>(5.4)</small></h3><p class="hint">Pushed or dragged in does not count · หลุดจากช่องให้ลด</p>
-      <div class="park"><div class="c-r"><button class="btn" data-mk="unpark" data-s="red" ${s.red_parked ? "" : "disabled"}>-</button><b>${s.red_parked}</b><button class="btn red" data-mk="park" data-s="red" ${s.red_parked >= 3 ? "disabled" : ""}>+</button></div>
-      <div class="c-b"><button class="btn" data-mk="unpark" data-s="blue" ${s.blue_parked ? "" : "disabled"}>-</button><b>${s.blue_parked}</b><button class="btn blue" data-mk="park" data-s="blue" ${s.blue_parked >= 3 ? "disabled" : ""}>+</button></div></div></section>
-    <section class="crit"><h3><span>4</span>Mission complete <small>(6.1)</small></h3><p class="hint">แท่นที่ 3 จอดสำเร็จ กดค้างแล้วเวลาหยุดทันที (FAQ 33)</p>
+      <div class="park"><div class="c-r"><button class="btn" data-mk="unpark" data-s="red" ${s.red_parked ? "" : "disabled"}>-</button><b>${s.red_parked}${ko(s, "red")}</b><button class="btn red" data-mk="park" data-s="red" ${s.red_parked >= 3 ? "disabled" : ""}>+</button></div>
+      <div class="c-b"><button class="btn" data-mk="unpark" data-s="blue" ${s.blue_parked ? "" : "disabled"}>-</button><b>${s.blue_parked}${ko(s, "blue")}</b><button class="btn blue" data-mk="park" data-s="blue" ${s.blue_parked >= 3 ? "disabled" : ""}>+</button></div></div></section>
+    <section class="crit"><h3><span>4</span>Knockout <small>(6.1 Mission complete)</small></h3><p class="hint">แท่นที่ 3 จอดสำเร็จ กดค้างแล้วเวลาหยุดทันที (FAQ 33)</p>
       <div class="pair"><button class="btn red big hold" data-hold="complete" data-s="red">RED<i></i></button><button class="btn blue big hold" data-hold="complete" data-s="blue">BLUE<i></i></button></div></section>
     <section class="foot"><div class="retry">Retry <button class="btn red small" data-mk="retry" data-s="red">R ${s.red_retries}</button><button class="btn blue small" data-mk="retry" data-s="blue">B ${s.blue_retries}</button></div>
-      <button class="btn" id="undo" ${s.marks.length ? "" : "disabled"}>Undo</button></section>
+      <button class="btn" id="undo" ${s.marks.some((x) => x.kind !== "complete") ? "" : "disabled"}>Undo</button></section>
     <p class="pred">If time ends now: ${p.side ? `<b class="${p.side === "red" ? "c-r" : "c-b"}">${p.side.toUpperCase()}</b> ${RULE_EN[p.method]}` : p.need === "replay" ? "Replay (FAQ 34)" : "Referee decides (FAQ 35)"}</p>
     <button class="btn danger hold" data-hold="false_start">False start (hold)<i></i></button>`;
 }
@@ -173,25 +176,23 @@ function reviewBody(f, m, g) {
   const stopped = f.phase === "stopped";
   const ln = (t, v) => `<div class="ln"><span>${t}</span><span>${v}</span></div>`;
   const ev = (x) => (x ? `<b class="${x.side === "red" ? "c-r" : x.side === "blue" ? "c-b" : ""}">${sideTxt(x.side).replace(" first", "")}</b> ${fmtMs1(x.t_ms)}` : "-");
-  const canEndCount = !stopped;
+  const canEndCount = true;   // scores stay editable after the clock stops; the stop itself cannot be undone
   let act;
   if (g.need === "judge") act = `<p>${RULE_TH.judge} ไม่มีทีมไหนออกจากกรอบแดง</p><div class="pair"><button class="btn red big" data-judge="red">RED wins</button><button class="btn blue big" data-judge="blue">BLUE wins</button></div>`;
   else {
-    const ok = reviewOk.held && reviewOk.seen && !Q.length;
+    const ok = !Q.length;
     const label = p.side ? "Confirm result" : p.need === "replay" ? `Replay with pattern ${g.pattern}` : "Referee decides";
-    act = `<label class="chk"><input type="checkbox" id="rk1" ${reviewOk.held ? "checked" : ""}><span>No stand held by robot<small>แท่นที่หุ่นถือค้างไม่นับ (FAQ 22)</small></span></label>
-      <label class="chk"><input type="checkbox" id="rk2" ${reviewOk.seen ? "checked" : ""}><span>Teams have seen result<small>ทีมสอบถามได้ก่อนรับรอง (FAQ 36)</small></span></label>
-      <button class="btn primary huge" id="confirm" ${ok ? "" : "disabled"}>${label}</button>${Q.length ? `<p class="muted center">รอส่งข้อมูลให้ครบก่อน</p>` : ""}`;
+    act = `<button class="btn primary huge" id="confirm" ${ok ? "" : "disabled"}>${label}</button>${Q.length ? `<p class="muted center">รอส่งข้อมูลให้ครบก่อน</p>` : ""}`;
   }
   return `<div class="clock"><div class="t">${stopped ? fmtMs1(f.stop_ms) : "1:30.0"}</div><div class="l">${stopped ? "Stopped at (from GO)" : "Time up"}</div></div>
     <section class="sum">
       ${ln("Left red box first", ev(s.exit))}${ln("First lift", ev(s.lift))}
       <div class="ln"><span>Stands at end</span><span class="park mini">
-        ${canEndCount ? `<button class="btn small" data-mk="unpark" data-s="red" ${s.red_parked ? "" : "disabled"}>-</button>` : ""}<b class="c-r">${s.red_parked}</b>${canEndCount ? `<button class="btn small" data-mk="park" data-s="red" ${s.red_parked >= 3 ? "disabled" : ""}>+</button>` : ""}
-        ${canEndCount ? `<button class="btn small" data-mk="unpark" data-s="blue" ${s.blue_parked ? "" : "disabled"}>-</button>` : ""}<b class="c-b">${s.blue_parked}</b>${canEndCount ? `<button class="btn small" data-mk="park" data-s="blue" ${s.blue_parked >= 3 ? "disabled" : ""}>+</button>` : ""}</span></div>
-      ${ln("Mission complete", ev(s.complete))}${ln("Retries", `<b class="c-r">${s.red_retries}</b> <b class="c-b">${s.blue_retries}</b>`)}
+        ${canEndCount ? `<button class="btn small" data-mk="unpark" data-s="red" ${s.red_parked ? "" : "disabled"}>-</button>` : ""}<b class="c-r">${s.red_parked}${ko(s, "red")}</b>${canEndCount ? `<button class="btn small" data-mk="park" data-s="red" ${s.red_parked >= 3 ? "disabled" : ""}>+</button>` : ""}
+        ${canEndCount ? `<button class="btn small" data-mk="unpark" data-s="blue" ${s.blue_parked ? "" : "disabled"}>-</button>` : ""}<b class="c-b">${s.blue_parked}${ko(s, "blue")}</b>${canEndCount ? `<button class="btn small" data-mk="park" data-s="blue" ${s.blue_parked >= 3 ? "disabled" : ""}>+</button>` : ""}</span></div>
+      ${ln("Knockout", ev(s.complete))}${ln("Retries", `<b class="c-r">${s.red_retries}</b> <b class="c-b">${s.blue_retries}</b>`)}
       ${!s.exit && !s.lift ? `<div class="row">${["red", "blue"].map((x) => `<button class="btn small" data-mk="exit_first" data-s="${x}">+ ${x.toUpperCase()} left box</button>`).join("")}</div>` : ""}
-      <button class="btn small" id="undo" ${s.marks.length ? "" : "disabled"}>Undo last</button>
+      <button class="btn small" id="undo" ${s.marks.some((x) => x.kind !== "complete") ? "" : "disabled"}>Undo last</button>
     </section>
     <section class="result"><div class="muted">Result</div><h2>${p.side ? `<span class="${p.side === "red" ? "c-r" : "c-b"}">${p.side.toUpperCase()} wins</span>` : p.need === "replay" ? "Tie, replay" : "Referee decides"}</h2>
       <div>${p.side ? RULE_EN[p.method] + " · " + RULE_TH[p.method] : p.need === "replay" ? "ผลเท่ากันทุกอย่าง แข่งใหม่ทันทีแบบสนามเดิม (FAQ 34)" : "ไม่มีทีมไหนออกจากกรอบแดง (FAQ 35)"}</div></section>
@@ -205,15 +206,19 @@ function bindMatch(f, m, g) {
   const go = $("go"); if (go) go.onclick = () => { go.disabled = true; call("a2_ref_go", {}).catch(() => {}); };
   const ab = $("absent"); if (ab) ab.onclick = () => { const s = prompt("ทีมที่ไม่มา พิมพ์ red หรือ blue"); if (s === "red" || s === "blue") call("a2_ref_absent", { p_side: s }).catch(() => {}); };
   const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
-  app.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = () => mark(g, b.dataset.mk, b.dataset.s)));
+  app.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = async () => {
+    const k = b.dataset.mk, sd = b.dataset.s, live = clockV3(field(1)).phase === "game";
+    if (k === "park" && live && summary(g)[sd + "_parked"] === 2) {
+      if (await ask(`${sd.toUpperCase()} จอดครบ 3 แท่น`, "Knockout แล้วหยุดเวลาทันที", "Knockout")) mark(g, "complete", sd);
+      return;
+    }
+    mark(g, k, sd);
+  }));
   app.querySelectorAll("[data-hold]").forEach((b) => holdBind(b, b.dataset.hold === "complete" ? 500 : 1000, () => {
     if (b.dataset.hold === "complete") mark(g, "complete", b.dataset.s);
     else { Q = Q.filter((i) => !(i.fn === "a2_ref_mark" && i.args.p_game === g.id)); saveQ(); call("a2_ref_false_start", {}).then(() => beep(300, 500)).catch(() => {}); }
   }));
   const u = $("undo"); if (u) u.onclick = () => undo(g);
-  const r1 = $("rk1"), r2 = $("rk2");
-  if (r1) r1.onchange = () => { reviewOk.held = r1.checked; render(true); };
-  if (r2) r2.onchange = () => { reviewOk.seen = r2.checked; render(true); };
   const c = $("confirm"); if (c) c.onclick = () => { c.disabled = true; call("a2_ref_confirm", { p_game: g.id }).then((r) => { reviewOk = { held: false, seen: false }; toast(r === "replay" ? "เสมอ แข่งใหม่แบบสนามเดิม" : r === "judge" ? "กรรมการต้องตัดสิน" : r.toUpperCase() + " wins"); afterGame(m.code); }).catch(() => {}); };
   app.querySelectorAll("[data-judge]").forEach((b) => (b.onclick = () => call("a2_ref_judge", { p_game: g.id, p_side: b.dataset.judge }).then(() => { reviewOk = { held: false, seen: false }; afterGame(m.code); }).catch(() => {})));
 }
@@ -230,7 +235,7 @@ function holdBind(btn, ms, fn) {
 let lastSec = null, lastPh = null;
 function tickClock() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
-  const ct = $("ct"); if (ct) { ct.textContent = fmtMs1(ck.ms); $("cl").textContent = PHASE_EN[ck.phase]; $("clock").classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); }
+  const ct = $("ct"); if (ct) { ct.textContent = fmtMs1(ck.ms); $("cl").textContent = ck.paused ? "Paused · tap to skip setup" : ck.phase === "setup" || ck.phase === "game" ? PHASE_EN[ck.phase] + " · tap to stop" : PHASE_EN[ck.phase]; $("clock").classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); }
   const cn = $("count"); if (cn && ck.count) cn.textContent = ck.count;
   const sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
   const pPh = lastPh, pSec = lastSec; lastPh = ck.phase; lastSec = sec;
@@ -305,3 +310,26 @@ document.addEventListener("click", (e) => {
 // Keep the bracket current while it is open, and close the documents sheet if the admin turns it off
 onChange(() => { const el = $("sheet"); if (el && sheet === "bracket") paintBracket(el); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
 addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") bracketScale(el); });
+
+// ---------- Confirm popup, tap-the-clock stop, fullscreen ----------
+function ask(title, text, okLabel) {
+  return new Promise((done) => {
+    const d = document.createElement("div"); d.className = "pop ask";
+    d.innerHTML = `<div class="ask-card"><h3>${esc(title)}</h3><p>${esc(text)}</p><div class="pair"><button class="btn big" data-a="0">ยกเลิก</button><button class="btn primary big" data-a="1">${esc(okLabel || "ยืนยัน")}</button></div></div>`;
+    d.addEventListener("click", (e) => { const b = e.target.closest("[data-a]"); if (!b && e.target !== d) return; d.remove(); done(!!b && b.dataset.a === "1"); });
+    document.body.append(d);
+  });
+}
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest("[data-stop]") || !pin || !ctl?.control) return;
+  const ck = clockV3(field(1));
+  if (ck.phase === "setup" && !ck.paused) { if (await ask("หยุดเวลา Setup", "หยุดนับเวลา Setup ไว้ แตะเวลาอีกครั้งเพื่อข้ามไป Ready", "หยุดเวลา")) call("a2_ref_stop", {}).catch(() => {}); }
+  else if (ck.phase === "setup" && ck.paused) { if (await ask("ข้าม Setup", "ไปขั้น Ready เพื่อตรวจรายการและเริ่มเกม", "ข้าม Setup")) call("a2_ref_setup", { p_action: "skip" }).catch(() => {}); }
+  else if (ck.phase === "game") { if (await ask("หยุดเวลาเกม", "เวลาหยุดทันทีและย้อนกลับไม่ได้ ตัดสินตามข้อ 6.2 ถึง 6.4 แก้คะแนนได้หลังหยุด", "หยุดเวลา")) call("a2_ref_stop", {}).then(() => beep(440, 600)).catch(() => {}); }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-fs]")) return;
+  const d = document, el = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  else (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+});

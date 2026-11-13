@@ -148,7 +148,7 @@ export function clockV3(f) {
   if (!f || !f.match_code) return { phase: "empty", ms: gm, elapsed: 0 };
   const t = now();
   switch (f.phase) {
-    case "setup": return { phase: "setup", ms: f.ends_at ? Math.max(0, Date.parse(f.ends_at) - t) : 0, elapsed: 0 };
+    case "setup": return f.running === false ? { phase: "setup", paused: true, ms: f.left_ms || 0, elapsed: 0 } : { phase: "setup", ms: f.ends_at ? Math.max(0, Date.parse(f.ends_at) - t) : 0, elapsed: 0 };
     case "ready": return { phase: "ready", ms: gm, elapsed: 0 };
     case "countdown": {
       const left = Date.parse(f.go_at) - t;
