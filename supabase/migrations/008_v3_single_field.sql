@@ -577,7 +577,7 @@ do $$ declare r record; begin
   end loop;
   for r in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
     and ((p.proname like 'a2\_adm\_%' or p.proname like 'a2\_ref\_%') and p.proname<>'a2_ref_auth'
-      or p.proname in ('a2_setup','a2_has_setup','a2_admin_login','a2_now','a2_tick')) loop
+      or p.proname in ('a2_setup','a2_has_setup','a2_admin_login','a2_now','a2_tick','a2_table','a2_place','a2_slot_seed')) loop
     execute format('grant execute on function %s to anon, authenticated', r.sig);
   end loop;
 end $$;
