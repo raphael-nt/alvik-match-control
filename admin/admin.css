@@ -38,6 +38,10 @@ dialog::backdrop{background:#16191Bb0}
 .seg{display:flex;flex-wrap:wrap;gap:8px}.seg .btn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .warn{background:#fbeceb;border:1px solid var(--red);border-radius:var(--r-sm);padding:6px 10px;margin:8px 0;color:#7c1f17}
 .login{max-width:380px;margin:12vh auto;padding:0 18px;display:grid;gap:12px}
+/* Sign-in form: label above a full-width input, more room between rows */
+.login{gap:18px}.login h1{margin:0 0 4px}.login p{margin:0}
+.login label{display:grid;gap:8px;font-weight:500}.login input{width:100%;min-height:46px;box-sizing:border-box}
+.login .btn{margin-top:6px;min-height:46px}
 .mono{font-family:"IBM Plex Mono",monospace;font-size:13px}
 .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}.tw .tbl{min-width:560px}
 @media (max-width:700px){.top{padding:8px 12px}.main{padding:12px}.fc .t{font-size:44px}}
