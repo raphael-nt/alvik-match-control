@@ -73,3 +73,5 @@ html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .ask{align-items:center;justify-content:center;padding:20px}
 .ask-card{background:#fff;color:#16191B;border-radius:14px;padding:20px;max-width:420px;width:100%;display:grid;gap:12px}
 .ask-card h3{margin:0;font-size:22px}.ask-card p{margin:0;color:#5D6663}
+.ask-btns{display:grid;gap:10px}
+.clock.paused .t{color:var(--tape)}
