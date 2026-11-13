@@ -1,8 +1,8 @@
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
-import { build as buildFormat, validate as validateFormat, defaults as fmtDefaults, STAGE_EN } from "../shared/format.js";
-import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
+import { build as buildFormat, validate as validateFormat, normalize as fmtNormalize, autoSlots, qualifiers, srcKey, STAGE_EN } from "../shared/format.js";
+import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
 useMarks();
 const fields = () => [field(1)].filter(Boolean);   // v3 single field
@@ -223,25 +223,47 @@ dlg.addEventListener("close", () => { dlgCode = ""; });
 function readGame(card) { const v = card.querySelector('[data-k="pattern"]').value; return { pattern: v ? +v : null }; }
 
 // ---------- Teams tab ----------
-const curFormat = () => ({ ...fmtDefaults(), ...(event().format || {}) });
-const FMT_FIELDS = [["groups", "Groups", 1, 8], ["size", "Teams per group", 2, 8], ["advance", "Advance per group", 1, 8]];
-function readFormat() { const f = {}; FMT_FIELDS.forEach(([k]) => (f[k] = +$("f_" + k).value)); ["bo_group", "bo_ko", "bo_final"].forEach((k) => (f[k] = +$("f_" + k).value)); return f; }
+// Format being edited. Starts from the stored format and is only saved by Apply format
+let fmt = null;
+const curFormat = () => fmtNormalize(event().format);
+const fmtEdit = () => (fmt ||= structuredClone(curFormat()));
+const slotLabel = (k) => { if (!k) return "Bye"; const q = qualifiers(fmt).find((x) => srcKey(x) === k); return q ? srcLabel(q) : k; };
 function fmtSummary(f) {
   const err = validateFormat(f); if (err.length) return `<div class="warn">${err.map(esc).join("<br>")}</div>`;
   const b = buildFormat(f), ko = b.matches.filter((m) => !m.grp), st = [...new Set(ko.map((m) => STAGE_EN[m.stage]))];
-  return `<p class="muted" style="margin:6px 0 0">${b.format.teams} teams · ${b.matches.length - ko.length} group matches${ko.length ? ` · knockout ${ko.length} matches (${st.join(", ")})` : " · no knockout, group winner is champion"}</p>`;
+  return `<p class="muted" style="margin:6px 0 0">${b.format.teams} teams · ${b.matches.length - ko.length} group matches${ko.length ? ` · knockout ${ko.length} matches (${st.join(", ")})` : " · ไม่มีรอบแพ้คัดออก"}</p>`;
 }
+// The whole format card; redrawn after every change
+function fmtCard(played) {
+  const f = fmtEdit(), boSel = (k, label) => `<label>${label}<select data-fk="${k}">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${+f[k] === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>`;
+  const grpRows = f.mode === "groups" ? `<table class="tbl fg"><thead><tr><th>Group</th><th>Teams</th><th>Advance</th><th></th></tr></thead><tbody>${f.groups.map((g, i) => `<tr><td><b>${String.fromCharCode(65 + i)}</b></td>
+      <td><input type="number" min="2" max="12" value="${g.size}" data-gi="${i}" data-gk="size"></td><td><input type="number" min="0" max="${g.size}" value="${g.adv}" data-gi="${i}" data-gk="adv"></td>
+      <td>${f.groups.length > 1 ? `<button class="btn small" data-act="fgdel" data-i="${i}">Remove</button>` : ""}</td></tr>`).join("")}</tbody></table>
+      <div class="btns"><button class="btn small" data-act="fgadd" ${f.groups.length >= 8 ? "disabled" : ""}>+ Add group</button></div>` : "";
+  const slots = f.slots || autoSlots(f), opts = ["", ...qualifiers(f).map(srcKey)];
+  const pairs = []; for (let i = 0; i < slots.length; i += 2) pairs.push([i, slots[i], slots[i + 1]]);
+  const sel = (i, v) => `<select data-slot="${i}">${opts.map((k) => `<option value="${k}" ${k === (v || "") ? "selected" : ""}>${esc(slotLabel(k))}</option>`).join("")}</select>`;
+  const ko = slots.length ? `<div class="h3">First knockout round <span class="muted">${f.slots ? "จัดเอง" : "จัดอัตโนมัติ"} · เปลี่ยนช่องได้ ทีมละ 1 ช่อง</span></div>
+      <div class="slots">${pairs.map(([i, a, b]) => `<div class="pr">${sel(i, a)}<span>vs</span>${sel(i + 1, b)}</div>`).join("")}</div>
+      <div class="btns"><button class="btn small" data-act="fslotauto">Auto arrange</button></div>` : "";
+  return `<div class="card fmtc">
+      <div class="gf" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+        <label>Format<select data-fk="mode"><option value="groups" ${f.mode === "groups" ? "selected" : ""}>Groups then knockout</option><option value="ko" ${f.mode === "ko" ? "selected" : ""}>Knockout only</option></select></label>
+        ${f.mode === "ko" ? `<label>Teams<input type="number" min="2" max="64" value="${f.teams}" data-fk="teams"></label>` : boSel("bo_group", "Group Bo")}
+        ${boSel("bo_ko", "Knockout Bo")}${boSel("bo_final", "Final Bo")}
+        <label class="chk2" style="align-self:end"><input type="checkbox" data-fk="third" ${f.third ? "checked" : ""}>3rd place match</label></div>
+      ${grpRows}${ko}
+      <div id="fsum">${fmtSummary(f)}</div>
+      <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button><button class="btn" data-act="fmtundo">Undo changes</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
+}
+function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void")); }
 function teamsView() {
-  const t = teamsArr(), draw = event().tv_mode === "draw", f = curFormat(), played = [...T.a2_game.values()].some((g) => g.status !== "void");
-  const num = (k, label, a, z) => `<label>${label}<input id="f_${k}" type="number" min="${a}" max="${z}" value="${f[k]}" data-fmt></label>`;
-  const bo = (k, label) => `<label>${label}<select id="f_${k}" data-fmt>${[1, 3, 5, 7].map((n) => `<option value="${n}" ${f[k] === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>`;
+  const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void");
   const r1 = groups().filter((g) => g.stage === "r1");
-  return `<div class="h2"><h2>Format</h2><span>ตั้งจำนวนสายและทีม แล้วกด Apply ระบบสร้างคู่ในสาย สายแพ้คัดออก และตารางสายให้เอง</span></div>
-   <div class="card"><div class="gf" style="grid-template-columns:repeat(6,minmax(0,1fr))">${FMT_FIELDS.map(([k, l, a, z]) => num(k, l, a, z)).join("")}${bo("bo_group", "Group Bo")}${bo("bo_ko", "Knockout Bo")}${bo("bo_final", "Final Bo")}</div>
-     <div id="fsum">${fmtSummary(f)}</div>
-     <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>
+  return `<div class="h2"><h2>Format</h2><span>ตั้งกลุ่ม (จำนวนทีมและทีมที่เข้ารอบแยกแต่ละกลุ่ม) หรือแพ้คัดออกล้วน แก้คู่รอบแรกได้ แล้วกด Apply</span></div>
+   ${fmtCard(played)}
    <div class="h2" style="margin-top:20px"><h2>Teams</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง ใช้ Shuffle เพื่อจับสาย</span></div>
-   <div class="teams">${r1.map((g) => `<div class="card grp"><h2>Group ${g.grp}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="Team ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>Absent</label></div>`; }).join("")}</div>`).join("")}</div>
+   <div class="teams">${(r1.length ? r1 : [{ grp: "", srcs: t.map((x) => ({ seed: x.seed })) }]).map((g) => `<div class="card grp"><h2>${g.grp ? "Group " + g.grp : "Teams (seed order)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="Team ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>Absent</label></div>`; }).join("")}</div>`).join("")}</div>
    <div class="btns"><button class="btn primary" data-act="saveteams">Save teams</button><button class="btn" data-act="shuffle">Shuffle</button></div>
    <div class="h2" style="margin-top:24px"><h2>Draw on Dashboard</h2><span>${draw ? "Dashboard อยู่ในโหมด Draw" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม Dashboard จะเผยชื่อทีมทีละทีม"}</span></div>
    <div class="btns"><button class="btn primary" data-act="drawstart">Start draw</button><button class="btn" data-act="tvauto">Back to Auto</button></div>`;
@@ -424,10 +446,15 @@ const H = {
   async saveteams() { const names = Array.from({ length: teamsArr().length }, (_, i) => document.querySelector(`[data-seed="${i + 1}"]`).value.trim()); await act(() => adm("a2_adm_teams", { p_names: names }), "บันทึกชื่อทีมแล้ว"); },
   shuffle() { const els = [...document.querySelectorAll("[data-seed]")], v = els.map((e) => e.value); for (let i = v.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [v[i], v[j]] = [v[j], v[i]]; } els.forEach((e, i) => (e.value = v[i])); toast("สลับแล้ว ยังไม่ได้บันทึก"); },
   async fmtapply() {
-    const f = readFormat(), err = validateFormat(f); if (err.length) return toast(err[0], true);
-    const b = buildFormat(f);
-    if (!confirm(`Apply format: ${f.groups} groups × ${f.size} teams, ${f.advance} advance per group\nสร้างคู่ใหม่ ${b.matches.length} คู่ แทนของเดิมทั้งหมด`)) return;
-    if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "Format applied") !== undefined) { await loadAll(); formTab = ""; render(); }
+    const f = fmtEdit(), err = validateFormat(f); if (err.length) return toast(err[0], true);
+    const b = buildFormat(f), desc = f.mode === "ko" ? `knockout only, ${f.teams} teams` : f.groups.map((g, i) => `${String.fromCharCode(65 + i)} ${g.size} ทีม เข้ารอบ ${g.adv}`).join(", ");
+    if (!confirm(`Apply format: ${desc}${f.third ? ", มีชิงที่ 3" : ""}\nสร้างคู่ใหม่ ${b.matches.length} คู่ แทนของเดิมทั้งหมด`)) return;
+    if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "Format applied") !== undefined) { fmt = null; await loadAll(); formTab = ""; render(); }
+  },
+  fmtundo() { fmt = null; redrawFmt(); },
+  fgadd() { const f = fmtEdit(); f.groups.push({ size: 3, adv: 2 }); f.slots = null; redrawFmt(); },
+  fgdel(b) { const f = fmtEdit(); f.groups.splice(+b.dataset.i, 1); f.slots = null; redrawFmt(); },
+  fslotauto() { fmtEdit().slots = null; redrawFmt(); },
   },
   async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "Draw started"); formTab = ""; render(); },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "Dashboard on Auto"); formTab = ""; render(); },
@@ -483,7 +510,18 @@ document.addEventListener("change", async (e) => {
     if ((await act(() => adm("a2_adm_event", { p: { rules_mode: on } }), on ? "Rules mode on" : "Rules mode off")) === undefined) e.target.checked = !on; else { formTab = ""; render(); }
   }
 });
-document.addEventListener("input", (e) => { if (e.target.matches("[data-fmt]")) { const el = $("fsum"); if (el) el.innerHTML = fmtSummary(readFormat()); } });
+document.addEventListener("change", (e) => {
+  const t = e.target; if (!t.closest || !t.closest(".fmtc")) return;
+  const f = fmtEdit();
+  if (t.dataset.fk) { const k = t.dataset.fk; f[k] = k === "third" ? t.checked : k === "mode" ? t.value : +t.value; if (k === "mode" || k === "teams") f.slots = null; }
+  else if (t.dataset.gk) { f.groups[+t.dataset.gi][t.dataset.gk] = +t.value; f.slots = null; }
+  else if (t.dataset.slot) {
+    // Picking a team that is already placed swaps the two slots, so every team stays in exactly one place
+    const sl = f.slots || autoSlots(f), i = +t.dataset.slot, v = t.value || null, j = v ? sl.indexOf(v) : -1;
+    if (j >= 0 && j !== i) sl[j] = sl[i]; sl[i] = v; f.slots = sl;
+  } else return;
+  redrawFmt();
+});
 document.addEventListener("change", async (e) => {
   const c = e.target.closest("[data-abs]"); if (!c) return;
   const seed = +c.dataset.abs, on = c.checked;
