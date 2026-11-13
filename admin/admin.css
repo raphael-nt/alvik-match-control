@@ -100,3 +100,5 @@ dialog::backdrop{background:#16191Bb0}
 .mk-u h3{font-size:min(7cqh,6.5cqw);color:var(--muted);margin:0}.mk-u div{display:flex;gap:4cqw;white-space:nowrap}
 .lbx-red{border-color:#e05a4f;background:#e05a4f26}.lbx-blue{border-color:#4f7be0;background:#4f7be026}.lbx-clock{border-color:#e8c547;background:#e8c54726}
 .lbx>i{z-index:3;position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#fff 50%)}
+/* Documents list */
+.doclist{display:grid;gap:8px;margin-top:12px}.docrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}

@@ -56,3 +56,10 @@ section h3 small{font-weight:400;color:var(--muted);font-size:14px}
 .banner{border-radius:var(--r-md);padding:12px 14px;background:var(--tape-soft);border:1px solid var(--tape)}
 .banner.done{background:#e3f2e8;border-color:var(--done)}
 @media (min-width:700px){.clock .t{font-size:120px}.count{font-size:260px}}
+/* Top bar icon buttons and the full-screen sheet for bracket and documents */
+.ib{background:transparent;border:1.5px solid #ffffffaa;border-radius:8px;width:38px;height:38px;display:grid;place-items:center;padding:0;color:#fff;cursor:pointer}
+.ib svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+#sheet{position:fixed;inset:0;z-index:20;background:var(--floor);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+.sh-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--teal);color:#fff}.sh-h b{font-size:18px}
+.sh-b{flex:1;overflow:auto;padding:12px}
+.docrow{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
