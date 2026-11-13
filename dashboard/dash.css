@@ -102,3 +102,20 @@ html,body{background:#14181A;color:var(--ink);overflow:hidden;height:100%;cursor
 .sched div{display:flex;gap:18px;padding:8px 14px;border-left:6px solid var(--line);background:var(--panel);border-radius:6px}
 .sched div.live{border-color:var(--tape)}.sched div.done{border-color:var(--done);opacity:.7}.sched div.ready{border-color:var(--teal)}
 .sched b{width:56px}.sched .s{margin-left:auto;color:var(--muted)}
+/* Live panels: absolute, sized from the layout editor. Content scales with the panel (container units) */
+.lp{position:absolute;container-type:size;overflow:hidden;display:flex}
+.lp>*{flex:1;min-width:0;min-height:0}
+.lp .lh{display:flex;align-items:center;gap:3cqw;font-size:min(56cqh,32px);color:var(--muted);white-space:nowrap}
+.lp .lt{padding:4cqh 5cqw;gap:3cqh;align-content:start}
+.lp .lt .k{font-size:min(5cqh,9cqw)}
+.lp .lt .n{font-size:min(11cqh,11cqw)}
+.lp .lt .w{font-size:min(22cqh,24cqw)}
+.lp .lt .ev{font-size:min(5.4cqh,5.6cqw)}
+.lp .lt .pk i{width:min(10cqh,10cqw);height:min(10cqh,10cqw)}
+.lp .lc{display:flex;flex-direction:column;justify-content:center}
+.lp .lc .t{font-size:min(48cqh,26cqw)}
+.lp .lc .p{font-size:min(8.5cqh,6cqw)}
+.lp .lc .msg{font-size:min(7.5cqh,5cqw)}
+.lp .bkarea{background:var(--panel);border-radius:10px;padding:8px}
+.lp .upn{font-size:min(8cqh,7.5cqw)}.lp .upn h3{font-size:min(7cqh,6.5cqw)}
+.groups .gp table{font-size:var(--fs,30px)}.groups .gp h2{font-size:calc(var(--fs,30px) * 1.1)}.groups .gp td.n{width:auto}

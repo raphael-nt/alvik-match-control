@@ -2,6 +2,7 @@
 import { useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { STAGE_EN } from "../shared/format.js";
+import { liveLayout } from "../shared/layout.js";
 
 useMarks();
 const stage = $("stage");
@@ -27,23 +28,34 @@ function mode() {
 // ---------- Live ----------
 function liveView() {
   const o = onField(); if (!o) return bracketView();
-  const { f, m } = o, g = openGame(m.code) || gamesOf(m.code).slice(-1)[0];
+  const { f, m } = o, g = openGame(m.code) || gamesOf(m.code).slice(-1)[0], rules = event().rules_mode !== false;
   const ms = g ? marksOf(g.id).filter((x) => !x.voided) : [], one = (k) => ms.find((x) => x.kind === k);
   const ev = (x, s) => (x && (x.side === s || x.side === "both") ? `<b>${fmtMs1(x.t_ms)}</b>` : x ? "-" : "waiting");
+  const gn = g ? gameNo(m.code, g) : 1, L = liveLayout(event().dash_layout?.live);
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="k">${s.toUpperCase()}</div><div class="n">${esc(sideName(m, s))}</div><div class="w">${m[s + "_wins"]}</div>
-    ${event().rules_mode === false ? "" : `<div class="pk">${[1, 2, 3].map((i) => `<i class="${g && i <= g[s + "_parked"] ? "on" : ""}"></i>`).join("")}</div>
-    <div class="ev"><span>Left red box first ${ev(one("exit_first"), s)}</span><span>First lift ${ev(one("lift_first"), s)}</span><span>Retries ${g ? g[s + "_retries"] || 0 : 0}</span></div>`}</div>`;
-  const gn = g ? gameNo(m.code, g) : 1;
-  return `${head("● LIVE")}<div class="live"><div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${event().rules_mode === false ? "" : `<span>Pattern <b>${g?.pattern || "-"}</b></span>`}</div>
-    <div class="lv">${tm("red")}<div class="lc">${event().rules_mode === false ? `<div class="t" style="font-size:200px">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>` : `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>`}</div>${tm("blue")}</div>
-    <div class="lb"><div class="bkarea">${bracketHtml({ dark: true, maxh: 280 })}</div>${upNextHtml()}</div></div><div id="cd"></div><div id="bn"></div>`;
+    ${rules ? `<div class="pk">${[1, 2, 3].map((i) => `<i class="${g && i <= g[s + "_parked"] ? "on" : ""}"></i>`).join("")}</div>
+    <div class="ev"><span>Left red box first ${ev(one("exit_first"), s)}</span><span>First lift ${ev(one("lift_first"), s)}</span><span>Retries ${g ? g[s + "_retries"] || 0 : 0}</span></div>` : ""}</div>`;
+  const body = {
+    info: `<div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
+    red: tm("red"), blue: tm("blue"),
+    clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
+    bracket: `<div class="bkarea">${bracketHtml({ dark: true, maxh: L.bracket.h - 16 })}</div>`,
+    upnext: upNextHtml(),
+  };
+  return `${head("● LIVE")}${Object.entries(L).filter(([, p]) => p.on).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
 }
 function bracketView() { return `${head("Bracket")}<div class="bkarea">${bracketHtml({ dark: true, maxh: 760 })}</div><div class="lb" style="height:auto;grid-template-columns:1fr">${upNextHtml()}</div>`; }
 function tableRows(G, adv) {
   const rows = tableOf(G).map((r) => `<tr class="${r.sure && r.pos <= adv ? "q" : ""}"><td class="p">${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) + (teamAbsent(r.seed) ? " (absent)" : "") : "TBD"}</td><td class="n">${r.mw}-${r.ml}</td><td class="n">${r.gw}-${r.gl}</td></tr>`).join("");
   return `<tr class="th"><td></td><td></td><td class="n">W-L</td><td class="n">Games</td></tr>` + rows;
 }
-function standingsView() { return `${head("Standings")}<div class="groups">${groups().map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${ROUND[g.stage] || ""}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`; }
+// Fit every group on one screen: pick columns and rows, then size text to the tallest group
+function standingsView() {
+  const gs = groups(), n = gs.length || 1, maxT = Math.max(2, ...gs.map((g) => (g.srcs || []).length));
+  const cols = n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols);
+  const cellH = (940 - (rows - 1) * 18) / rows, fs = Math.max(16, Math.min(34, Math.floor((cellH - 90) / (maxT + 1) / 1.45)));
+  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${ROUND[g.stage] || ""}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
+}
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
   return `${head("Schedule")}<div class="sched">${matches().map((m) => `<div class="${m.status}"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="s">${m.status === "done" ? m.red_wins + "-" + m.blue_wins : m.sched_at ? fmtTime(m.sched_at) : ""} ${st[m.status] || ""}</span></div>`).join("")}</div>`;
@@ -65,7 +77,7 @@ let key = "", cur = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
-  const k = md + JSON.stringify([event().name, event().rules_mode, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
+  const k = md + JSON.stringify([event().name, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
   stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "champion" ? champView() : bracketView();

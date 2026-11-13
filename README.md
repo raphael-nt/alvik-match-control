@@ -29,6 +29,7 @@ Live at https://raphael-nt.github.io/alvik-match-control/
 - Same time, Retry, Undo and False start are available. Taps are saved on the phone first and resent until the server accepts them.
 - Review shows the result by rule 6. A full tie becomes a replay with the same pattern (FAQ 34). If no robot left the red box, the referee decides (FAQ 35).
 - Admin can fix anything afterwards in the event log of each game. Results and standings are recomputed.
+- Admin > Dashboard has a Live layout editor: drag panels to move, drag the corner to resize, tick to show or hide, then Save layout.
 
 ## Format
 
@@ -47,6 +48,6 @@ Round robin, every match Bo3, 16 matches in total. Ranking: matches won, game di
 
 - Plain HTML and JavaScript ES modules, no build step, served from GitHub Pages.
 - Supabase tables start with `a2_`. Every write goes through a SECURITY DEFINER RPC that checks the admin password or the referee PIN, device and session. Anonymous users can only read.
-- SQL is in `supabase/migrations/` (001 to 010). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
+- SQL is in `supabase/migrations/` (001 to 011). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
 - Design: `docs/DESIGN_v3.md` (current) and `docs/DESIGN.md` (v2 and how it was built).
 - `index.html` at the root links to the three pages. The old v1 system lives in `/legacy/`.
