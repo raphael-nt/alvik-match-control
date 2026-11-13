@@ -1,6 +1,7 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { STAGE_EN } from "../shared/format.js";
 
 useMarks();
 const stage = $("stage");
@@ -10,8 +11,7 @@ let sound = false;
 $("fs").onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; beep(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
 const snd = (f, ms) => sound && beep(f, ms);
 
-const ROUND = { r1: "Round 1 Group stage", r2: "Round 2", final: "Final" };
-const ADV = { A: 2, B: 2, C: 2, D: 1, E: 1 };
+const ROUND = STAGE_EN;
 const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}</div>`;
 const upNext = (n = 3) => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no).slice(0, n);
 const upNextHtml = () => `<div class="upn"><h3>Up next</h3>${upNext().map((m) => `<div><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span>${m.sched_at ? fmtTime(m.sched_at) : ""}</span></div>`).join("") || "<div>-</div>"}</div>`;
@@ -38,12 +38,12 @@ function liveView() {
     <div class="lv">${tm("red")}<div class="lc"><div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div></div>${tm("blue")}</div>
     <div class="lb"><div class="bkarea">${bracketHtml({ dark: true, maxh: 280 })}</div>${upNextHtml()}</div></div><div id="cd"></div><div id="bn"></div>`;
 }
-function bracketView() { return `${head("Bracket")}<div class="bkarea">${bracketHtml({ dark: true, maxh: 760 })}</div><div class="lb" style="height:150px;grid-template-columns:1fr">${upNextHtml()}</div>`; }
+function bracketView() { return `${head("Bracket")}<div class="bkarea">${bracketHtml({ dark: true, maxh: 760 })}</div><div class="lb" style="height:auto;grid-template-columns:1fr">${upNextHtml()}</div>`; }
 function tableRows(G, adv) {
   const rows = tableOf(G).map((r) => `<tr class="${r.sure && r.pos <= adv ? "q" : ""}"><td class="p">${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) + (teamAbsent(r.seed) ? " (absent)" : "") : "TBD"}</td><td class="n">${r.mw}-${r.ml}</td><td class="n">${r.gw}-${r.gl}</td></tr>`).join("");
   return `<tr class="th"><td></td><td></td><td class="n">W-L</td><td class="n">Games</td></tr>` + rows;
 }
-function standingsView() { return `${head("Standings")}<div class="groups">${["A", "B", "C", "D", "E"].map((G) => `<div class="gp"><h2>Group ${G}<span class="rnd">${G < "D" ? "Round 1" : "Round 2"}</span></h2><table>${tableRows(G, ADV[G])}</table></div>`).join("")}</div>`; }
+function standingsView() { return `${head("Standings")}<div class="groups">${groups().map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${ROUND[g.stage] || ""}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`; }
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
   return `${head("Schedule")}<div class="sched">${matches().map((m) => `<div class="${m.status}"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="s">${m.status === "done" ? m.red_wins + "-" + m.blue_wins : m.sched_at ? fmtTime(m.sched_at) : ""} ${st[m.status] || ""}</span></div>`).join("")}</div>`;
@@ -51,7 +51,8 @@ function scheduleView() {
 function drawView() {
   const ds = event().draw_state || {}, t = now() - (ds.start || 0);
   const col = (G, seeds) => `<div class="dc"><h2>Group ${G}</h2>${seeds.map((sd) => `<div class="slot"><small>${sd}</small>${t >= (sd - 1) * 1600 ? `<span class="nm">${esc(teamName(sd))}</span>` : `<span class="muted">...</span>`}</div>`).join("")}</div>`;
-  return `${head("Draw")}<div class="drawcols">${col("A", [1, 2, 3])}${col("B", [4, 5, 6])}${col("C", [7, 8, 9])}</div>`;
+  const r1 = groups().filter((g) => g.stage === "r1");
+  return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${Math.min(4, r1.length)},1fr)">${r1.map((g) => col(g.grp, g.srcs.map((x) => x.seed))).join("")}</div>`;
 }
 function champView() {
   const F = match("F"); if (!F || F.winner_seed == null) return bracketView();

@@ -25,8 +25,8 @@ export const teamAbsent = (seed) => !!T.a2_team.get(seed)?.absent;
 export const gamesOf = (code) => [...T.a2_game.values()].filter((g) => g.match_code === code && g.status !== "void").sort((a, b) => a.idx - b.idx);
 export const openGame = (code) => gamesOf(code).filter((g) => ["ready", "live", "review"].includes(g.status)).pop() || null;
 export const gameNo = (code, g) => gamesOf(code).filter((x) => x.idx <= g.idx && x.status !== "replay").length;
-export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "ทีม " + seed; };
-export const srcLabel = (src) => (src && src.seed ? "ลำดับ " + src.seed : src ? "ที่ " + src.p + " สาย " + src.g : "");
+export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
+export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} Group ${src.g}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
 export const tableOf = (grp) => S.standings.filter((r) => r.grp === grp).sort((a, b) => a.pos - b.pos);
 export const STATUS_TH = { locked: "รอผล", ready: "พร้อม", queued: "อยู่ในสนาม", live: "กำลังแข่ง", done: "จบแล้ว" };
@@ -106,11 +106,11 @@ export function connect() {
     setNet("wait");
     if (ch) { try { sb.removeChannel(ch); } catch (e) {} }
     ch = sb.channel("a2-" + Math.random().toString(36).slice(2, 8));
-    for (const t of Object.keys(PK).filter((x) => x !== "a2_group" && (x !== "a2_mark" || OPT.marks))) {
+    for (const t of Object.keys(PK).filter((x) => x !== "a2_mark" || OPT.marks)) {
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (p) => {
         const row = p.eventType === "DELETE" ? p.old : p.new, m = T[t];
         if (p.eventType === "DELETE") m.delete(row[PK[t]]); else m.set(row[PK[t]], { ...(m.get(row[PK[t]]) || {}), ...row });
-        if (t === "a2_match" || t === "a2_game" || t === "a2_tiebreak") reloadDerived();
+        if (t === "a2_match" || t === "a2_game" || t === "a2_tiebreak" || t === "a2_group") reloadDerived();
         notify();
       });
     }
