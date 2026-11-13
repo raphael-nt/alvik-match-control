@@ -69,3 +69,16 @@ dialog::backdrop{background:#16191Bb0}
 .switch span::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s}
 .switch input:checked+span{background:var(--teal)}.switch input:checked+span::after{left:23px}
 .switch input:focus-visible+span{outline:3px solid var(--teal);outline-offset:2px}
+/* Standings fit on one screen: no horizontal scroll, compact rows */
+.stand{gap:12px}.stand .tw{overflow:visible}.stand .tw .tbl{min-width:0}
+.stand .tbl th,.stand .tbl td{padding:5px 8px}.stand .h2{margin-bottom:4px}
+.stand .tbl td:nth-child(2){overflow-wrap:anywhere}
+/* Live layout editor: 16:9 preview of the 1920x1080 Dashboard */
+.layc{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}.chk2{display:flex;gap:6px;align-items:center;font-weight:500}
+.lay{position:relative;width:100%;aspect-ratio:16/9;background:#14181A;border-radius:8px;overflow:hidden;touch-action:none;user-select:none;
+  background-image:linear-gradient(#ffffff0d 1px,transparent 1px),linear-gradient(90deg,#ffffff0d 1px,transparent 1px);background-size:5.2083% 9.259%}
+.lhead{position:absolute;left:2.08%;top:2.6%;right:2.08%;height:6%;border:1px dashed #ffffff33;color:#ffffff66;font-size:12px;display:flex;align-items:center;padding-left:8px;border-radius:4px}
+.lbx{position:absolute;border:2px solid #4fb3a9;background:#4fb3a926;border-radius:6px;color:#fff;cursor:move;display:flex;flex-direction:column;justify-content:center;align-items:center;font-size:13px;gap:2px;overflow:hidden}
+.lbx span{font-size:11px;opacity:.7}
+.lbx-red{border-color:#e05a4f;background:#e05a4f26}.lbx-blue{border-color:#4f7be0;background:#4f7be026}.lbx-clock{border-color:#e8c547;background:#e8c54726}
+.lbx i{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#fff 50%)}

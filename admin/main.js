@@ -1,4 +1,5 @@
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { build as buildFormat, validate as validateFormat, defaults as fmtDefaults, STAGE_EN } from "../shared/format.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
@@ -67,15 +68,15 @@ function shell() {
 // ---------- Render ----------
 let lastKey = "", formTab = "";
 if (!TABS.some((t) => t[0] === tab)) tab = "home";
-const FORM_TABS = ["schedule", "teams", "settings"];   // tabs with inputs, redrawn only on tab switch or after save
+const FORM_TABS = ["schedule", "teams", "settings", "tv"];   // tabs with inputs, redrawn only on tab switch or after save
 function render(force) {
   if (!authed || !S.ready) { if (authed) { const mn = $("mn"); if (mn && !mn.innerHTML) mn.innerHTML = `<p class="muted">กำลังโหลดข้อมูล</p>`; } return; }
   const ev = event(); const en = $("evn"); if (en && en.textContent !== ev.name) en.textContent = ev.name || "Alvik";
   paintNet();
-  if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); } updateDlgBanner(); return; }
+  if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); if (tab === "tv") paintLay(); } updateDlgBanner(); return; }
   const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
   if (k === lastKey) { updateDlgBanner(); return; }
-  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); updateDlgBanner();
+  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "tv") paintLay(); updateDlgBanner();
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
@@ -168,10 +169,11 @@ function autofill() {
 
 // ---------- Standings tab ----------
 function groupsView() {
-  return `<div class="grid5">${groups().map((gr) => { const G = gr.grp;
+  const n = groups().length || 1, cols = innerWidth < 760 ? 1 : n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4;
+  return `<div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${groups().map((gr) => { const G = gr.grp;
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
     return `<div><div class="h2"><h2>Group ${G}</h2><span>${ROUND[gr.stage] || ""} · top ${gr.adv} advance</span></div>
-      <div class="tw"><table class="tbl"><thead><tr><th>ที่</th><th>ทีม</th><th class="num">ชนะ-แพ้</th><th class="num">เกม</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
+      <div class="tw"><table class="tbl"><thead><tr><th>#</th><th>Team</th><th class="num">W-L</th><th class="num">Games</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
         <td>${r.tied && i > 0 && rows[i - 1].tied && r.seed != null ? `<button class="btn small" data-act="tbup" data-g="${G}" data-s="${r.seed}">ขึ้น</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${tiedAny ? `<div class="warn">มีทีมเสมอกันทุกเกณฑ์ กดขึ้นเพื่อให้ทีมนั้นอยู่เหนือทีมข้างบน</div>` : ""}${tb ? `<div class="btns"><button class="btn small" data-act="tbclear" data-g="${G}">ล้างการตัดสินลำดับ</button></div>` : ""}</div>`;
   }).join("")}</div>`;
@@ -245,10 +247,41 @@ function teamsView() {
 
 // ---------- Dashboard tab ----------
 function tvView() {
+  lay = liveLayout(event().dash_layout?.live);
   const ev = event(), M = [["auto", "Auto", "มีคู่บนสนามใช้ Live ไม่มีใช้ Bracket จบคู่ชิงขึ้น Champion เอง"], ["live", "Live", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "Bracket", "ตารางสายเต็มจอ พร้อม Up next"], ["standings", "Standings", "ตารางคะแนนทุกสาย"], ["schedule", "Schedule", "ลำดับคู่ เวลานัด สถานะ"], ["draw", "Draw", "เผยชื่อทีมทีละทีม"], ["champion", "Champion", "ใช้ได้เมื่อจบคู่ชิง"]];
   return `<div class="h2"><h2>Dashboard mode</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้ Auto</span></div>
-   <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">On</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>Use</button></div>`).join("")}</div>`;
+   <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">On</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>Use</button></div>`).join("")}</div>
+   <div class="h2" style="margin-top:22px"><h2>Live layout</h2><span>ลากเพื่อย้าย ลากมุมขวาล่างเพื่อลดขยาย ติ๊กเพื่อซ่อนหรือแสดง แล้วกด Save layout</span></div>
+   <div class="card"><div class="layc">${PANELS.map(([k, t]) => `<label class="chk2"><input type="checkbox" data-layon="${k}" ${lay[k].on ? "checked" : ""}>${t}</label>`).join("")}</div>
+     <div class="lay" id="lay"></div>
+     <div class="btns"><button class="btn primary" data-act="laysave">Save layout</button><button class="btn" data-act="layundo">Undo changes</button><button class="btn" data-act="layreset">Reset to default</button><a class="btn" href="../dashboard/" target="_blank" rel="noopener">Open Dashboard</a></div></div>`;
 }
+// ---------- Live layout editor ----------
+let lay = null, drag = null;
+const LAB = Object.fromEntries(PANELS);
+function paintLay() {
+  const el = $("lay"); if (!el || !lay) return;
+  el.innerHTML = PANELS.filter(([k]) => lay[k].on).map(([k]) => { const p = lay[k];
+    return `<div class="lbx lbx-${k}" data-lk="${k}" style="left:${(p.x / STAGE.w) * 100}%;top:${(p.y / STAGE.h) * 100}%;width:${(p.w / STAGE.w) * 100}%;height:${(p.h / STAGE.h) * 100}%"><b>${LAB[k]}</b><span>${p.w}×${p.h}</span><i data-rs="${k}" title="Resize"></i></div>`; }).join("") + `<div class="lhead">Header (fixed)</div>`;
+  document.querySelectorAll("[data-layon]").forEach((c) => (c.checked = lay[c.dataset.layon].on));
+}
+document.addEventListener("pointerdown", (e) => {
+  const box = e.target.closest("[data-lk]"); if (!box || !lay) return;
+  const k = box.dataset.lk, rect = $("lay").getBoundingClientRect(), sc = rect.width / STAGE.w;
+  drag = { k, rs: !!e.target.closest("[data-rs]"), sx: e.clientX, sy: e.clientY, o: { ...lay[k] }, sc, el: box };
+  box.setPointerCapture(e.pointerId); e.preventDefault();
+});
+document.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const snap = (v) => Math.round(v / 10) * 10, dx = (e.clientX - drag.sx) / drag.sc, dy = (e.clientY - drag.sy) / drag.sc, o = drag.o, p = lay[drag.k];
+  if (drag.rs) { p.w = Math.max(80, Math.min(STAGE.w - o.x, snap(o.w + dx))); p.h = Math.max(40, Math.min(STAGE.h - o.y, snap(o.h + dy))); }
+  else { p.x = Math.max(0, Math.min(STAGE.w - o.w, snap(o.x + dx))); p.y = Math.max(0, Math.min(STAGE.h - o.h, snap(o.y + dy))); }
+  const st = drag.el.style; st.left = (p.x / STAGE.w) * 100 + "%"; st.top = (p.y / STAGE.h) * 100 + "%"; st.width = (p.w / STAGE.w) * 100 + "%"; st.height = (p.h / STAGE.h) * 100 + "%";
+  drag.el.querySelector("span").textContent = p.w + "×" + p.h;
+});
+document.addEventListener("pointerup", () => (drag = null));
+document.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.layon && lay) { lay[e.target.dataset.layon].on = e.target.checked; paintLay(); } });
+
 
 // ---------- Settings tab ----------
 function settingsView() {
@@ -367,7 +400,10 @@ const H = {
   },
   async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "Draw started"); formTab = ""; render(); },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "Dashboard on Auto"); formTab = ""; render(); },
-  async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "Dashboard mode changed"); },
+  async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "Dashboard mode changed"); formTab = ""; render(); },
+  async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "Layout saved"); },
+  layreset() { lay = liveLayout(null); paintLay(); },
+  layundo() { lay = liveLayout(event().dash_layout?.live); paintLay(); },
   async savename() { const name = $("en").value.trim(); if (!name) return toast("ใส่ชื่องานก่อน", true); await act(() => adm("a2_adm_event", { p: { name } }), "Name saved"); },
   async saveev() {
     const p = { setup_ms: Math.max(0, +$("es").value) * 1000, game_ms: Math.max(10, +$("eg").value) * 1000, countdown_ms: Math.max(0, Math.min(10, +$("ec").value)) * 1000 };
