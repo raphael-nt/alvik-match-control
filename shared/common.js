@@ -3,8 +3,10 @@ export const SB_URL = "https://sylaqdubfjgmaxhtrrnk.supabase.co";
 export const SB_KEY = "sb_publishable_9x3-7C7fLbQZBDtkk8YAGw_P1XclMv8";
 export const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const PK = { a2_event: "id", a2_team: "seed", a2_match: "code", a2_game: "id", a2_field: "no", a2_tiebreak: "grp", a2_group: "grp" };
-export const T = { a2_event: new Map(), a2_team: new Map(), a2_match: new Map(), a2_game: new Map(), a2_field: new Map(), a2_tiebreak: new Map(), a2_group: new Map() };
+const PK = { a2_event: "id", a2_team: "seed", a2_match: "code", a2_game: "id", a2_field: "no", a2_tiebreak: "grp", a2_group: "grp", a2_mark: "id" };
+const OPT = { marks: false };
+export const useMarks = () => { OPT.marks = true; };
+export const T = { a2_event: new Map(), a2_team: new Map(), a2_match: new Map(), a2_game: new Map(), a2_field: new Map(), a2_tiebreak: new Map(), a2_group: new Map(), a2_mark: new Map() };
 export const S = { standings: [], ranking: [], net: "wait", offset: 0, ready: false };
 
 const listeners = new Set();
@@ -80,10 +82,11 @@ export const REASON_TH = { replay: "ผลเท่ากันทุกอย�
 export async function loadAll() {
   const q = (t) => sb.from(t).select("*");
   const [ev, tm, ma, ga, fi, tb, st, rk, gr] = await Promise.all([q("a2_event"), q("a2_team"), q("a2_match"), q("a2_game"), q("a2_field"), q("a2_tiebreak"), sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*"), q("a2_group")]);
-  const err = [ev, tm, ma, ga, fi, tb, st, rk, gr].find((r) => r.error);
+  const mk = OPT.marks ? await q("a2_mark") : { data: [] };
+  const err = [ev, tm, ma, ga, fi, tb, st, rk, gr, mk].find((r) => r.error);
   if (err) throw err.error;
   const fill = (name, rows) => { const m = T[name]; m.clear(); rows.forEach((r) => m.set(r[PK[name]], r)); };
-  fill("a2_event", ev.data); fill("a2_team", tm.data); fill("a2_match", ma.data); fill("a2_game", ga.data); fill("a2_field", fi.data); fill("a2_tiebreak", tb.data); fill("a2_group", gr.data);
+  fill("a2_event", ev.data); fill("a2_team", tm.data); fill("a2_match", ma.data); fill("a2_game", ga.data); fill("a2_field", fi.data); fill("a2_tiebreak", tb.data); fill("a2_group", gr.data); fill("a2_mark", mk.data);
   S.standings = st.data; S.ranking = rk.data.sort((a, b) => a.pos - b.pos); S.ready = true;
   notify();
 }
@@ -95,7 +98,7 @@ async function reloadDerived() {
     if (!st.error) S.standings = st.data; if (!rk.error) S.ranking = rk.data.sort((a, b) => a.pos - b.pos); notify();
   }, 120);
 }
-export function paintNet() { const s = S.net; document.querySelectorAll("[data-net]").forEach((e) => { e.className = "netdot " + s; e.querySelector("b").textContent = { on: "ออนไลน์", wait: "กำลังเชื่อม", err: "หลุดการเชื่อมต่อ" }[s]; }); }
+export function paintNet() { const s = S.net; document.querySelectorAll("[data-net]").forEach((e) => { e.className = "netdot " + s; e.querySelector("b").textContent = { on: "Online", wait: "Connecting", err: "Offline" }[s]; }); }
 function setNet(s) { S.net = s; paintNet(); notify(); }
 export function connect() {
   let ch = null;
@@ -103,7 +106,7 @@ export function connect() {
     setNet("wait");
     if (ch) { try { sb.removeChannel(ch); } catch (e) {} }
     ch = sb.channel("a2-" + Math.random().toString(36).slice(2, 8));
-    for (const t of Object.keys(PK).filter((x) => x !== "a2_group")) {
+    for (const t of Object.keys(PK).filter((x) => x !== "a2_group" && (x !== "a2_mark" || OPT.marks))) {
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (p) => {
         const row = p.eventType === "DELETE" ? p.old : p.new, m = T[t];
         if (p.eventType === "DELETE") m.delete(row[PK[t]]); else m.set(row[PK[t]], { ...(m.get(row[PK[t]]) || {}), ...row });
@@ -136,3 +139,38 @@ export function beep(f = 880, ms = 160) {
 }
 export const netBadge = () => `<span class="netdot wait" data-net><i></i><b>กำลังเชื่อม</b></span>`;
 export function raf(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+
+// ---------- v3 สนามเดียว นาฬิกากลาง ----------
+export const marksOf = (gid) => [...T.a2_mark.values()].filter((m) => m.game_id === gid).sort((a, b) => a.created_at.localeCompare(b.created_at));
+// คืน { phase, ms (ค่าที่แสดง), elapsed (ตั้งแต่ GO), count (วินาทีนับถอยหลัง) }
+export function clockV3(f) {
+  const ev = event(), gm = ev.game_ms || 90000;
+  if (!f || !f.match_code) return { phase: "empty", ms: gm, elapsed: 0 };
+  const t = now();
+  switch (f.phase) {
+    case "setup": return { phase: "setup", ms: f.ends_at ? Math.max(0, Date.parse(f.ends_at) - t) : 0, elapsed: 0 };
+    case "ready": return { phase: "ready", ms: gm, elapsed: 0 };
+    case "countdown": {
+      const left = Date.parse(f.go_at) - t;
+      if (left > 0) return { phase: "countdown", ms: gm, elapsed: 0, count: Math.ceil(left / 1000) };
+      const el = Math.min(gm, -left); return { phase: el >= gm ? "over" : "game", ms: gm - el, elapsed: el };
+    }
+    case "game": { const el = Math.min(gm, Math.max(0, t - Date.parse(f.go_at))); return { phase: el >= gm ? "over" : "game", ms: gm - el, elapsed: el }; }
+    case "stopped": return { phase: "stopped", ms: gm - (f.stop_ms || 0), elapsed: f.stop_ms || 0 };
+    case "over": return { phase: "over", ms: 0, elapsed: gm };
+    default: return { phase: "idle", ms: gm, elapsed: 0 };
+  }
+}
+export const PHASE_EN = { empty: "Waiting", idle: "Idle", setup: "Setup", ready: "Ready", countdown: "Countdown", game: "Live", stopped: "Stopped", over: "Time up" };
+export const fmtMs1 = (ms) => { if (ms == null) return "-"; const d = Math.max(0, Math.floor(ms / 100)); const s = Math.floor(d / 10); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + "." + (d % 10); };
+// ตัวตัดสิน v3 ตรงกับ a2_decide ในฐานข้อมูล (ใช้แสดงล่วงหน้า)
+export function decideV3(g) {
+  if (!g) return { need: "judge" };
+  if (g.complete_side === "red" || g.complete_side === "blue") return { side: g.complete_side, method: "full" };
+  if (g.red_parked !== g.blue_parked) return { side: g.red_parked > g.blue_parked ? "red" : "blue", method: "count" };
+  if (g.lift_side) return g.lift_side === "both" ? { need: "replay" } : { side: g.lift_side, method: "lift" };
+  if (g.exit_side) return g.exit_side === "both" ? { need: "replay" } : { side: g.exit_side, method: "exit" };
+  return { need: "judge" };
+}
+export const RULE_EN = { full: "Rule 6.1 mission complete", count: "Rule 6.2 more stands parked", lift: "Rule 6.3 first lift", exit: "Rule 6.4 left red box first", judge: "Referee decision (FAQ 35)" };
+export const RULE_TH = { full: "ทำภารกิจครบ 3 แท่นก่อน (6.1)", count: "จอดแท่นได้มากกว่าเมื่อหมดเวลา (6.2)", lift: "ยกแท่นแรกได้ก่อน (6.3)", exit: "ออกพ้นกรอบแดงก่อน (6.4)", judge: "กรรมการตัดสิน (FAQ 35)" };
