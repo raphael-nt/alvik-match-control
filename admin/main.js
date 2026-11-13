@@ -2,7 +2,7 @@ import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, onChange, event, matches, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
 useMarks();
-const fields = () => [field(1)].filter(Boolean);   // v3 สนามเดียว
+const fields = () => [field(1)].filter(Boolean);   // v3 single field
 const app = $("app"), dlg = $("dlg");
 const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} return null; };
 const lstore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
@@ -12,7 +12,7 @@ const TABS = [["home", "Overview"], ["queue", "Queue"], ["schedule", "Schedule"]
 const ROUND = { r1: "Round 1", r2: "Round 2", final: "Final" };
 const ST_EN = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
 
-// ---------- เรียก RPC ของแอดมิน ----------
+// ---------- Admin RPC ----------
 async function adm(name, args) {
   try { return await rpc(name, { p_pw: pw, ...args }); }
   catch (e) { if (e.code === "forbidden") { logout(true); } throw e; }
@@ -23,7 +23,7 @@ async function act(fn, ok) {
 }
 function logout(expired) { pw = ""; authed = false; store("a2pw", null); if (expired) toast("รหัสผ่านไม่ถูกต้องหรือถูกเปลี่ยนแล้ว", true); drawLogin(); }
 
-// ---------- เข้าสู่ระบบ และตั้งค่าครั้งแรก ----------
+// ---------- Sign in and first-time setup ----------
 async function drawLogin() {
   if (hasSetup === null) { try { hasSetup = await rpc("a2_has_setup"); } catch (e) { hasSetup = true; } }
   const first = !hasSetup;
@@ -54,7 +54,7 @@ async function boot() {
   drawLogin();
 }
 
-// ---------- โครงหน้า ----------
+// ---------- Shell ----------
 function shell() {
   app.innerHTML = `<div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}<button class="btn small" id="lo">Sign out</button></div>
     <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">${t}</button>`).join("")}</nav><div class="main" id="mn"></div>`;
@@ -63,10 +63,10 @@ function shell() {
   paintNet();
 }
 
-// ---------- วาดหน้า ----------
+// ---------- Render ----------
 let lastKey = "", formTab = "";
 if (!TABS.some((t) => t[0] === tab)) tab = "home";
-const FORM_TABS = ["schedule", "teams", "settings"];   // แท็บที่มีช่องกรอก วาดซ้ำเฉพาะตอนสลับแท็บหรือหลังกดบันทึก
+const FORM_TABS = ["schedule", "teams", "settings"];   // tabs with inputs, redrawn only on tab switch or after save
 function render(force) {
   if (!authed || !S.ready) { if (authed) { const mn = $("mn"); if (mn && !mn.innerHTML) mn.innerHTML = `<p class="muted">กำลังโหลดข้อมูล</p>`; } return; }
   const ev = event(); const en = $("evn"); if (en && en.textContent !== ev.name) en.textContent = ev.name || "Alvik";
@@ -78,7 +78,7 @@ function render(force) {
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
-// ---------- แท็บ Overview ----------
+// ---------- Overview tab ----------
 const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
 function clockBox(f) {
@@ -95,7 +95,7 @@ function homeView() {
     <div class="hbot"><div class="card"><div class="h2"><h2>Up next</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div>${clockBox(field(1))}</div></div></div>`;
 }
 
-// ---------- แท็บ Queue (คิวเดียว สนามเดียว) ----------
+// ---------- Queue tab (single queue, single field) ----------
 function flowBtns(f) {
   const b = (a, t, c = "") => `<button class="btn ${c}" data-act="timer" data-a="${a}">${t}</button>`;
   const ph = f.phase;
@@ -126,7 +126,7 @@ function queueView() {
   return `<div class="cols"><div class="stack">${card}</div><div><div class="h2"><h2>Order</h2><span>เรียกได้ทีละคู่ คู่บนสนามต้องจบหรือถูกเอาลงก่อน</span></div><div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Teams</th><th class="num">Score</th><th>Status</th><th>Time</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
-// ---------- แท็บ ตั้งเวลา ----------
+// ---------- Schedule tab ----------
 const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const hm = (iso) => iso ? fmtTime(iso) : "";
 function scheduleView() {
@@ -165,7 +165,7 @@ function autofill() {
   toast("เติมแล้ว ตรวจสอบแล้วกดบันทึก");
 }
 
-// ---------- แท็บ สายและอันดับ ----------
+// ---------- Standings tab ----------
 function groupsView() {
   return `<div class="grid5">${["A", "B", "C", "D", "E"].map((G) => {
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
@@ -176,11 +176,11 @@ function groupsView() {
   }).join("")}</div>`;
 }
 
-// ---------- แท็บ ทุกคู่ ----------
+// ---------- Matches tab ----------
 const matchesView = () => `<div class="h2"><h2>Matches</h2><span>แก้ผลรายเกมได้ทุกคู่ แม้จบแล้ว ระบบคำนวณอันดับและผู้ชนะใหม่ให้เอง</span></div>
   <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Round</th><th>Teams</th><th class="num">Score</th><th>Status</th><th></th></tr></thead><tbody>${matches().map((m) => `<tr><td><b>${m.code}</b></td><td>${ROUND[m.stage]}${m.grp ? " สาย " + m.grp : ""} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td class="num">${m.red_wins}-${m.blue_wins}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td><td><button class="btn small" data-act="edit" data-c="${m.code}">Open</button></td></tr>`).join("")}</tbody></table></div>`;
 
-// ---------- หน้าต่างแก้คู่ ----------
+// ---------- Match dialog ----------
 let dlgCode = "", dlgSig = "";
 const sigOf = (c) => JSON.stringify([match(c), gamesOf(c), gamesOf(c).map((g) => marksOf(g.id).map((x) => x.id + x.voided + x.t_ms))]);
 const KIND = { exit_first: "Left red box first", lift_first: "First lift", park: "Stand parked +1", unpark: "Stand parked -1", complete: "Mission complete", retry: "Retry", false_start: "False start" };
@@ -217,7 +217,7 @@ function updateDlgBanner() { if (!dlg.open || !dlgCode) return; const w = $("dwa
 dlg.addEventListener("close", () => { dlgCode = ""; });
 function readGame(card) { const v = card.querySelector('[data-k="pattern"]').value; return { pattern: v ? +v : null }; }
 
-// ---------- แท็บ ทีม ----------
+// ---------- Teams tab ----------
 function teamsView() {
   const t = teamsArr(), draw = event().tv_mode === "draw";
   return `<div class="h2"><h2>Teams</h2><span>ลำดับ 1 ถึง 9 คือสายที่ทีมอยู่ A คือ 1-3 B คือ 4-6 C คือ 7-9 ใช้ปุ่มสุ่มเพื่อจับสาย</span></div>
@@ -227,14 +227,14 @@ function teamsView() {
    <div class="btns"><button class="btn primary" data-act="drawstart">Start draw</button><button class="btn" data-act="tvauto">Back to Auto</button></div>`;
 }
 
-// ---------- แท็บ หน้า TV ----------
+// ---------- Dashboard tab ----------
 function tvView() {
   const ev = event(), M = [["auto", "Auto", "มีคู่บนสนามใช้ Live ไม่มีใช้ Bracket จบคู่ชิงขึ้น Champion เอง"], ["live", "Live", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "Bracket", "ตารางสายเต็มจอ พร้อม Up next"], ["standings", "Standings", "ตารางคะแนนทุกสาย"], ["schedule", "Schedule", "ลำดับคู่ เวลานัด สถานะ"], ["draw", "Draw", "เผยชื่อทีมทีละทีม"], ["champion", "Champion", "ใช้ได้เมื่อจบคู่ชิง"]];
   return `<div class="h2"><h2>Dashboard mode</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้ Auto</span></div>
    <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">On</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>Use</button></div>`).join("")}</div>`;
 }
 
-// ---------- แท็บ ตั้งค่า ----------
+// ---------- Settings tab ----------
 function settingsView() {
   const ev = event(), base = new URL("../", location.href).href;
   const link = (p, t, d) => `<div class="lk"><div data-qr="${base}${p}/"></div><div><b>${t}</b><div class="muted">${d}</div><code>${base}${p}/</code><div class="btns"><button class="btn small" data-act="copy" data-u="${base}${p}/">คัดลอกลิงก์</button><a class="btn small" style="text-decoration:none" href="${base}${p}/" target="_blank" rel="noopener">เปิด</a></div></div></div>`;
@@ -253,7 +253,7 @@ function afterForm() {
   document.querySelectorAll("[data-qr]").forEach((d) => { try { const q = window.qrcode(0, "M"); q.addData(d.dataset.qr); q.make(); d.innerHTML = q.createSvgTag({ scalable: true, margin: 2 }); d.firstChild.style.cssText = "width:110px;height:110px"; } catch (e) {} });
 }
 
-// ---------- แท็บ ประวัติ ----------
+// ---------- Log tab ----------
 let logRows = [], logF = "";
 const AL = { "queue.call": "Call match", "queue.clear": "Clear field", "ref.transfer": "Transfer referee", "flow.setup_start": "Start setup", "flow.setup_skip": "Skip setup", "flow.go": "Start", "flow.false_start": "False start", "flow.reset": "Reset game", "game.confirm": "Confirm result", "match.absent_req": "Absent request", "mark.undo": "Undo", "mark.add": "Admin add event", "mark.void": "Admin delete event", "mark.unvoid": "Admin restore event", "mark.edit": "Admin edit event", "mark.exit_first": "Left red box first", "mark.lift_first": "First lift", "mark.park": "Stand +1", "mark.unpark": "Stand -1", "mark.complete": "Mission complete", "mark.retry": "Retry", "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง", "match.forfeit": "แพ้บาย", "team.absent": "ทีมไม่มา",
   "timer.start_setup": "เริ่ม Setup", "timer.start_game": "เริ่มแข่ง", "timer.pause": "หยุดนาฬิกา", "timer.resume": "เล่นต่อ", "timer.reset": "รีเซ็ตนาฬิกา",
@@ -266,14 +266,14 @@ async function loadLog() { logRows = (await act(() => adm("a2_adm_audit", { p_li
 
 const VIEW = { home: homeView, queue: queueView, schedule: scheduleView, groups: groupsView, matches: matchesView, teams: teamsView, tv: tvView, settings: settingsView, log: logView };
 
-// ---------- นาฬิกาในการ์ดสนาม ----------
+// ---------- Clock ----------
 function clocks() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
   document.querySelectorAll("[data-clk]").forEach((el) => { el.textContent = ck.phase === "countdown" ? String(ck.count) : ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms); el.classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); });
   document.querySelectorAll("[data-ph]").forEach((el) => { el.textContent = PHASE_EN[ck.phase] + (ck.phase === "stopped" ? " (Mission complete)" : ""); });
 }
 
-// ---------- การกดปุ่ม ----------
+// ---------- Button handlers ----------
 const H = {
   async open(b) {
     const c = b.dataset.c, M = match(c);

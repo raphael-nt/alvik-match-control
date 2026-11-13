@@ -1,4 +1,4 @@
-// หน้ากรรมการ v3 สนามเดียว นาฬิกากลาง Checklist ตามเกณฑ์ (docs/DESIGN_v3.md ข้อ 4)
+// Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
 import { useMarks, connect, onChange, paintNet, rpc, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
 
 useMarks();
@@ -9,11 +9,11 @@ let pin = L("a2pin") || "";
 let ctl = null;            // { control, session }
 let wake = null;
 let reviewOk = { held: false, seen: false };
-let finished = null;       // { code, winner } แสดง Match finished ชั่วครู่
+let finished = null;       // { code, winner } shows Match finished briefly
 const app = $("app");
 const vib = () => { try { navigator.vibrate && navigator.vibrate(18); } catch (e) {} };
 
-// ---------- คิวออฟไลน์ (ข้อ 7.6) ----------
+// ---------- Offline queue (design 7.6) ----------
 let Q = []; try { Q = JSON.parse(L("a2q") || "[]"); } catch (e) { Q = []; }
 const saveQ = () => L("a2q", JSON.stringify(Q));
 let flushing = false;
@@ -24,8 +24,8 @@ async function flush() {
       const it = Q[0];
       try { const r = await rpc(it.fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...it.args }); if (r && r.id) T.a2_game.set(r.id, r); }
       catch (e) {
-        if (/fetch|network|Failed/i.test(e.message || "") || !e.code) break;   // เน็ตหลุด ลองใหม่รอบหน้า
-        toast(e.message, true);                                                  // เซิร์ฟเวอร์ปฏิเสธ ทิ้งรายการนี้
+        if (/fetch|network|Failed/i.test(e.message || "") || !e.code) break;   // network down, retry next round
+        toast(e.message, true);                                                  // server rejected, drop this item
       }
       Q.shift(); saveQ();
     }
@@ -34,7 +34,7 @@ async function flush() {
 setInterval(flush, 2000);
 function enqueue(fn, args) { Q.push({ fn, args }); saveQ(); render(true); flush(); }
 
-// เหตุการณ์ของเกมนี้ รวมที่ยังรอส่ง
+// Events of this game, including ones still waiting to send
 function marksView(gid) {
   const srv = marksOf(gid).filter((m) => !m.voided && m.kind !== "false_start");
   const undone = new Set(Q.filter((i) => i.fn === "a2_ref_undo").map((i) => i.args.p_id));
@@ -63,7 +63,7 @@ function undo(g) {
 }
 async function call(fn, args) { try { const r = await rpc(fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...args }); vib(); return r; } catch (e) { if (e.code === "forbidden") { ctl = null; claim(); } toast(e.message || "ส่งไม่สำเร็จ", true); throw e; } }
 
-// ---------- สิทธิ์เครื่องกรรมการ ----------
+// ---------- Referee device claim ----------
 async function claim() {
   if (!pin) return;
   try { ctl = await rpc("a2_ref_claim", { p_pin: pin, p_device: device }); keepAwake(); }
@@ -72,14 +72,14 @@ async function claim() {
 }
 async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => (wake = null)); } } catch (e) {} }
 
-// ---------- ส่วนประกอบ ----------
+// ---------- Components ----------
 const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
 const teams = (m) => `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, "red"))}</b><em>${m.red_wins}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, "blue"))}</b><em>${m.blue_wins}</em></div></div>`;
 const clockBox = () => `<div class="clock" id="clock"><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></div>`;
 const sideBtns = (key, both) => `<div class="pair"><button class="btn red big" data-mk="${key}" data-s="red">RED</button><button class="btn blue big" data-mk="${key}" data-s="blue">BLUE</button></div>${both ? `<button class="btn same" data-mk="${key}" data-s="both">Same time</button>` : ""}`;
 const sideTxt = (s) => (s === "both" ? "Same time" : s === "red" ? "RED first" : "BLUE first");
 
-// ---------- หน้าต่าง ๆ ----------
+// ---------- Views ----------
 function loginView(err) {
   app.innerHTML = `<div class="login"><h1>Referee</h1><p class="muted">ใส่ PIN ที่ได้จากผู้จัด</p>
     <input id="pin" inputmode="numeric" autocomplete="off" aria-label="PIN" maxlength="12">
@@ -209,7 +209,7 @@ function holdBind(btn, ms, fn) {
   btn.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
-// ---------- นาฬิกาและเสียง ----------
+// ---------- Clock and sound ----------
 let lastSec = null, lastPh = null;
 function tickClock() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
@@ -222,7 +222,7 @@ function tickClock() {
   if (ck.phase === "game" && sec <= 5 && sec > 0 && sec !== pSec) beep(880, 90);
   if (ck.phase === "over" && pPh === "game") beep(440, 900);
   if (pPh === "setup" && ck.phase === "ready") beep(660, 400);
-  // ถึงเวลาแล้วให้เซิร์ฟเวอร์เลื่อนสถานะทันที ไม่ต้องรอ tick 8 วินาที
+  // Time is up: ask the server to advance now instead of waiting for the 8 s tick
   if (((ck.phase === "setup" && ck.ms <= 0) || (f.phase === "game" && ck.phase === "over")) && Date.now() - (tickClock.t || 0) > 1500) { tickClock.t = Date.now(); rpc("a2_tick").catch(() => {}); }
   if (pPh && ck.phase !== pPh && (ck.phase === "game" || ck.phase === "over")) render(true);
 }

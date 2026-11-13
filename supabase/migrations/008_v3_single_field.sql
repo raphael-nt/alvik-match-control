@@ -1,8 +1,8 @@
--- 008 v3: สนามเดียว นาฬิกากลางเรือนเดียว บันทึกเหตุการณ์ (a2_mark)
--- ดู docs/DESIGN_v3.md ข้อ 7 ลำดับการรัน: 001 ถึง 007 แล้วจึง 008
--- ข้อควรระวัง ไฟล์นี้ทำให้หน้าเว็บ v2 (admin, ref, tv) ใช้ไม่ได้ ต้องอัปเดตหน้าเว็บพร้อมกัน
+-- 008 v3: single field, one central clock, event log (a2_mark)
+-- See docs/DESIGN_v3.md section 7. Run order: 001 to 007, then 008
+-- Warning: this breaks the v2 web pages (admin, ref, tv). Deploy the v3 pages together
 
--- ===== 1. ลบฟังก์ชันเดิมที่เปลี่ยน signature =====
+-- ===== 1. Drop old functions whose signature changes =====
 drop function if exists public.a2_adm_assign(text,text,int);
 drop function if exists public.a2_adm_unassign(text,int);
 drop function if exists public.a2_adm_timer(text,int,text);
@@ -17,22 +17,22 @@ drop function if exists public.a2_ref_op(text,text,int,uuid,bigint,text,text,int
 drop function if exists public.a2_ref_finish(text,text,int,uuid,bigint);
 drop function if exists public.a2_ref_judge(text,text,int,uuid,bigint,text);
 
--- ===== 2. ตารางและคอลัมน์ =====
--- สนามเหลือแถวเดียว
+-- ===== 2. Tables and columns =====
+-- Keep a single field row
 update public.a2_match set field_no=null where field_no is not null and field_no<>1;
 delete from public.a2_fdev where no<>1;
 delete from public.a2_field where no<>1;
 alter table public.a2_field add constraint a2_field_single check (no=1);
 alter table public.a2_field
-  add column if not exists go_at timestamptz,          -- เวลา GO ตามเซิร์ฟเวอร์
-  add column if not exists stop_ms int,                -- เวลาที่นาฬิกาหยุด (Mission complete หรือหมดเวลา)
+  add column if not exists go_at timestamptz,          -- server time at GO
+  add column if not exists stop_ms int,                -- time the clock stopped (Mission complete or time up)
   add column if not exists checks jsonb not null default '{}'::jsonb;  -- Pre-start checklist: red_in, blue_in, stands
 -- phase: idle setup ready countdown game stopped over
 
 alter table public.a2_event drop column if exists field_count;
 alter table public.a2_event add column if not exists countdown_ms int not null default 3000;
 alter table public.a2_match drop column if exists sched_field;
-alter table public.a2_match add column if not exists absent_req text check (absent_req in ('red','blue'));  -- กรรมการขอแพ้บาย รอแอดมินอนุมัติ
+alter table public.a2_match add column if not exists absent_req text check (absent_req in ('red','blue'));  -- referee absent request, waiting for admin
 
 alter table public.a2_game
   add column if not exists exit_side text check (exit_side in ('red','blue','both')),
@@ -64,7 +64,7 @@ create policy a2_mark_read on public.a2_mark for select to anon, authenticated u
 revoke insert,update,delete,truncate on public.a2_mark from anon, authenticated;
 alter publication supabase_realtime add table public.a2_mark;
 
--- ===== 3. ตัวตัดสิน v3 (ข้อ 7.4) =====
+-- ===== 3. Decider v3 (design 7.4) =====
 create or replace function public.a2_decide(g public.a2_game, out side text, out method text, out need text)
 language plpgsql immutable set search_path=public as $$
 begin
@@ -81,7 +81,7 @@ begin
   need:='judge';                                                                                           -- FAQ 35
 end $$;
 
--- ===== 4. ค่าสรุปในแถวเกม คำนวณจากเหตุการณ์ที่ไม่ถูก void =====
+-- ===== 4. Game summary columns, computed from non-voided events =====
 create function public.a2_sum(p_game bigint) returns void language plpgsql security definer set search_path=public as $$
 begin
   update a2_game g set
@@ -97,12 +97,12 @@ begin
     blue_parked=greatest(0,least(3,(select count(*) filter (where m.kind='park')-count(*) filter (where m.kind='unpark') from a2_mark m where m.game_id=g.id and m.side='blue' and not m.voided))),
     version=g.version+1, updated_at=now()
   where g.id=p_game;
-  update a2_game set red_parked=3 where id=p_game and complete_side in ('red','both');   -- Mission complete = แท่นครบ 3
+  update a2_game set red_parked=3 where id=p_game and complete_side in ('red','both');   -- Mission complete means 3 stands
   update a2_game set blue_parked=3 where id=p_game and complete_side in ('blue','both');
   update a2_match set updated_at=now() where code=(select match_code from a2_game where id=p_game);
 end $$;
 
--- เวลาตั้งแต่ GO (ms) ตามนาฬิกาเซิร์ฟเวอร์
+-- Time since GO (ms) by server clock
 create or replace function public.a2_elapsed(f public.a2_field) returns int language plpgsql stable security definer set search_path=public as $$
 declare ev a2_event;
 begin
@@ -113,7 +113,7 @@ begin
   return least(ev.game_ms, greatest(0,(extract(epoch from (now()-f.go_at))*1000)::int));
 end $$;
 
--- ===== 5. เลื่อนสถานะตามเวลา (Setup จบ, ถึง GO, หมด 1:30) =====
+-- ===== 5. Advance state by time (setup end, GO, 1:30 up) =====
 create function public.a2_sync() returns void language plpgsql security definer set search_path=public as $$
 declare f a2_field; ev a2_event; gid bigint; ph text;
 begin
@@ -138,7 +138,7 @@ begin
   end if;
 end $$;
 
--- ===== 6. ปิดเกม (ผลเสมอ แข่งใหม่ แบบสนามเดิม) =====
+-- ===== 6. Close game (tie means replay with the same pattern) =====
 create or replace function public.a2_close_game(p_game bigint, p_actor text) returns text language plpgsql security definer set search_path=public as $$
 declare g a2_game; d record; f a2_field;
 begin
@@ -162,7 +162,7 @@ begin
   return coalesce(d.side,'replay');
 end $$;
 
--- ===== 7. ลำดับขั้นของเกม (กรรมการเรียกผ่าน a2_ref_*, แอดมินเรียกผ่าน a2_adm_timer) =====
+-- ===== 7. Game flow (referee via a2_ref_*, admin via a2_adm_timer) =====
 create function public.a2_flow(p_action text, p_actor text, p_force boolean default false) returns void language plpgsql security definer set search_path=public as $$
 declare f a2_field; ev a2_event; g a2_game; goat timestamptz; ok boolean;
 begin
@@ -204,7 +204,7 @@ begin
   perform a2_audit(p_actor,'flow.'||p_action,f.match_code||'/g'||g.idx,null,null);
 end $$;
 
--- ===== 8. กรรมการ =====
+-- ===== 8. Referee =====
 create function public.a2_ref_auth(p_pin text, p_device text, p_session uuid) returns a2_field language plpgsql security definer set search_path=public as $$
 declare f a2_field; dv text;
 begin
@@ -216,7 +216,7 @@ begin
   return f;
 end $$;
 
--- ขอเป็นเครื่องกรรมการ คืน {control, session} control=false คือดูอย่างเดียว (มีเครื่องอื่นใช้อยู่ใน 30 วินาที)
+-- Claim the referee device. Returns {control, session}; control=false is view only (another device active in last 30 s)
 create function public.a2_ref_claim(p_pin text, p_device text) returns jsonb language plpgsql security definer set search_path=public as $$
 declare f a2_field; dv text;
 begin
@@ -248,7 +248,7 @@ begin
   update a2_field set ref_seen=null, updated_at=now() where no=1;
 end $$;
 
--- เลือกแบบสนาม p_n null = สุ่ม
+-- Choose field pattern, p_n null = random
 create function public.a2_ref_pattern(p_pin text, p_device text, p_session uuid, p_game bigint, p_n int default null) returns a2_game language plpgsql security definer set search_path=public as $$
 declare f a2_field; g a2_game;
 begin
@@ -298,7 +298,7 @@ begin
   perform a2_flow('false_start','ref:'||left(p_device,6),false);
 end $$;
 
--- บันทึกเหตุการณ์ p_id สร้างที่เครื่องกรรมการ ส่งซ้ำได้ p_t_ms null = ใช้เวลาเซิร์ฟเวอร์
+-- Record an event. p_id is made on the referee device so resends are safe. p_t_ms null = use server time
 create function public.a2_ref_mark(p_pin text, p_device text, p_session uuid, p_game bigint, p_id uuid, p_kind text, p_side text, p_t_ms int default null) returns a2_game
 language plpgsql security definer set search_path=public as $$
 declare f a2_field; g a2_game; ev a2_event; t int; src text; cur int; actor text;
@@ -386,7 +386,7 @@ begin
   perform a2_audit('ref:'||left(p_device,6),'game.judge',g.match_code||'/g'||g.idx,null,jsonb_build_object('side',p_side));
 end $$;
 
--- ขอแพ้บาย p_side null = ยกเลิกคำขอ
+-- Absent request, p_side null = cancel
 create function public.a2_ref_absent(p_pin text, p_device text, p_session uuid, p_side text) returns void language plpgsql security definer set search_path=public as $$
 declare f a2_field;
 begin
@@ -397,7 +397,7 @@ begin
   perform a2_audit('ref:'||left(p_device,6),'match.absent_req',f.match_code,null,to_jsonb(p_side));
 end $$;
 
--- ===== 9. แอดมิน =====
+-- ===== 9. Admin =====
 create function public.a2_do_call(p_code text, p_actor text) returns void language plpgsql security definer set search_path=public as $$
 declare m a2_match; f a2_field;
 begin
@@ -429,7 +429,7 @@ begin
   perform a2_audit('admin','queue.clear',null,null,to_jsonb(f.match_code));
 end $$;
 
--- ควบคุมแทนกรรมการ p_action: setup_start setup_skip go false_start reset
+-- Admin control in place of referee. p_action: setup_start setup_skip go false_start reset
 create function public.a2_adm_timer(p_pw text, p_action text) returns void language plpgsql security definer set search_path=public as $$
 begin perform a2_need_admin(p_pw); perform a2_flow(p_action,'admin',true); end $$;
 
@@ -441,7 +441,7 @@ begin
   perform a2_audit('admin','ref.transfer',null,null,null);
 end $$;
 
--- แก้ Event log p_op: add void unvoid edit
+-- Edit event log. p_op: add void unvoid edit
 create function public.a2_adm_mark(p_pw text, p_game bigint, p_op text, p_id uuid default null, p_kind text default null, p_side text default null, p_t_ms int default null) returns a2_game
 language plpgsql security definer set search_path=public as $$
 declare g a2_game; ev a2_event; d record; before jsonb;
@@ -466,7 +466,7 @@ begin
   end;
   perform a2_sum(p_game);
   select * into g from a2_game where id=p_game;
-  if g.status='done' and g.decided_by='auto' then   -- ผลคำนวณใหม่ตามเหตุการณ์
+  if g.status='done' and g.decided_by='auto' then   -- recompute result from events
     select * into d from a2_decide(g);
     if d.side is not null then update a2_game set winner=d.side, method=d.method where id=p_game;
     else update a2_game set status='review', winner=null, method=null, decided_by=null, need=d.need where id=p_game; end if;
@@ -508,7 +508,7 @@ begin
   return g;
 end $$;
 
--- อนุมัติแพ้บาย p_side null = ยกเลิก (ล้างคำขอด้วย)
+-- Approve forfeit, p_side null = cancel (also clears request)
 create or replace function public.a2_adm_forfeit(p_pw text, p_code text, p_side text) returns void language plpgsql security definer set search_path=public as $$
 begin
   perform a2_need_admin(p_pw);
@@ -556,7 +556,7 @@ begin
   perform a2_audit('admin','reset',null,null,null);
 end $$;
 
--- ===== 10. tick: เลื่อนเวลา และเรียกคู่ตามเวลานัดเมื่อสนามว่าง =====
+-- ===== 10. tick: advance time and call scheduled match when field is free =====
 create or replace function public.a2_tick() returns void language plpgsql security definer set search_path=public as $$
 declare f a2_field; m record;
 begin
@@ -570,7 +570,7 @@ begin
   end if;
 end $$;
 
--- ===== 11. สิทธิ์ =====
+-- ===== 11. Privileges =====
 do $$ declare r record; begin
   for r in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'a2\_%' loop
     execute format('revoke all on function %s from public, anon, authenticated', r.sig);

@@ -1,5 +1,5 @@
--- ทดสอบ migration 008 รันต่อท้าย 008 ในธุรกรรมเดียว แล้วจบด้วย exception เพื่อ rollback (ไม่แตะข้อมูลจริง)
--- ใช้: begin; <008>; <ไฟล์นี้>; (ผลรายงานอยู่ในข้อความ error ขึ้นต้น TEST REPORT)
+-- Test for migration 008. Runs in one transaction and ends with an exception so everything rolls back
+-- Usage: begin; <008>; <this file>; (the report is in the error message starting with TEST REPORT)
 do $t$
 declare
   r text := ''; f a2_field; g a2_game; s jsonb; sess uuid; gid bigint; gid2 bigint; d record; x text; m a2_match; mk uuid; n int;
@@ -8,7 +8,7 @@ begin
   update a2_secret set admin_hash=a2_hash(pw), ref_hash=a2_hash(pin);
   select count(*) into n from a2_field; r := r||case when n=1 then 'PASS ' else 'FAIL ' end||'field rows='||n||E'\n';
 
-  -- ===== A. เรียกคู่ ถือสิทธิ์ ลำดับขั้น เหตุการณ์ หมดเวลา รับรอง =====
+  -- ===== A. Call match, referee claim, flow, events, time up, confirm =====
   perform a2_adm_call(pw,'A1');
   select * into f from a2_field where no=1;
   r := r||case when f.match_code='A1' and f.phase='idle' then 'PASS ' else 'FAIL ' end||'call A1 phase='||f.phase||E'\n';
@@ -58,7 +58,7 @@ begin
   select id into gid2 from a2_game where match_code='A1' and status='ready';
   r := r||case when x='red' and m.red_wins=1 and f.phase='idle' and gid2 is not null and f.checks='{}'::jsonb then 'PASS ' else 'FAIL ' end||'confirm='||x||' wins '||m.red_wins||'-'||m.blue_wins||E'\n';
 
-  -- ===== B. Mission complete หยุดเวลา ย้อน และจบคู่ =====
+  -- ===== B. Mission complete stops clock, undo, match finishes =====
   perform a2_ref_pattern(pin,dv,sess,gid2,3);
   perform a2_ref_check(pin,dv,sess,'red_in',true); perform a2_ref_check(pin,dv,sess,'blue_in',true); perform a2_ref_check(pin,dv,sess,'stands',true);
   perform a2_ref_setup(pin,dv,sess,'skip'); perform a2_ref_go(pin,dv,sess);
@@ -75,7 +75,7 @@ begin
   select * into m from a2_match where code='A1';
   r := r||case when x='red' and m.status='done' and m.winner_seed=m.red_seed then 'PASS ' else 'FAIL ' end||'match A1 done by 2-0 status='||m.status||E'\n';
 
-  -- ===== C. เสมอแข่งใหม่ ตัดสินโดยกรรมการ =====
+  -- ===== C. Tie leads to replay, referee decides =====
   perform a2_adm_call(pw,'A2');
   select * into f from a2_field where no=1; sess := f.session;
   select id into gid from a2_game where match_code='A2' and status='ready';
@@ -98,7 +98,7 @@ begin
   select * into g from a2_game where id=gid2; select * into m from a2_match where code='A2';
   r := r||case when g.winner='blue' and g.method='judge' and g.decided_by='referee' and m.blue_wins=1 then 'PASS ' else 'FAIL ' end||'referee judge winner='||coalesce(g.winner,'-')||E'\n';
 
-  -- ===== D. False start / เรียกคู่ตอนสนามไม่ว่าง / ขอแพ้บาย =====
+  -- ===== D. False start / call while field busy / absent request =====
   begin perform a2_adm_call(pw,'A3'); r:=r||'FAIL call while busy'||E'\n'; exception when others then r:=r||'PASS call while busy: '||left(sqlerrm,20)||E'\n'; end;
   perform a2_adm_clear(pw);
   perform a2_adm_call(pw,'A3');
@@ -118,7 +118,7 @@ begin
   perform a2_adm_forfeit(pw,'A3','red');
   select * into m from a2_match where code='A3'; r := r||case when m.absent_req is null and m.forfeit='red' and m.status='done' and m.blue_wins=2 then 'PASS ' else 'FAIL ' end||'forfeit approves status='||m.status||' '||m.red_wins||'-'||m.blue_wins||E'\n';
 
-  -- ===== E. ตารางตัดสิน (ข้อ 7.4) =====
+  -- ===== E. Decision table (design 7.4) =====
   select * into g from a2_game limit 1;
   g.complete_side:=null; g.exit_side:=null; g.lift_side:=null; g.red_parked:=0; g.blue_parked:=0;
   g.complete_side:='red'; select * into d from a2_decide(g); r:=r||case when d.side='red' and d.method='full' then 'PASS ' else 'FAIL ' end||'6.1 complete red'||E'\n';
@@ -131,7 +131,7 @@ begin
   g.lift_side:=null; g.exit_side:='both'; select * into d from a2_decide(g); r:=r||case when d.need='replay' then 'PASS ' else 'FAIL ' end||'exit both -> replay'||E'\n';
   g.exit_side:=null; select * into d from a2_decide(g); r:=r||case when d.need='judge' then 'PASS ' else 'FAIL ' end||'nobody left box -> judge'||E'\n';
 
-  -- ===== F. แอดมินแก้ Event log แล้วผลคำนวณใหม่ =====
+  -- ===== F. Admin edits event log and result is recomputed =====
   select id into gid from a2_game where match_code='A1' and idx=1;
   select * into g from a2_game where id=gid;
   r := r||'info A1g1 winner='||g.winner||' method='||g.method||' decided_by='||g.decided_by||E'\n';
@@ -142,7 +142,7 @@ begin
   r := r||case when g.winner='red' and g.method='count' then 'PASS ' else 'FAIL ' end||'admin void -> back to red count'||E'\n';
   begin perform a2_adm_mark(pw,gid,'add',null,'exit_first','blue',100); perform a2_adm_mark(pw,gid,'add',null,'exit_first','red',100); r:=r||'FAIL admin duplicate'||E'\n'; exception when others then r:=r||'PASS admin duplicate exit_first rejected'||E'\n'; end;
 
-  -- ===== G. tick เรียกคู่ตามเวลานัด และสิทธิ์ =====
+  -- ===== G. tick calls scheduled match, privileges =====
   update a2_match set auto_open=true, sched_at=now()-interval '1 minute' where code='B1';
   perform a2_tick();
   select * into f from a2_field where no=1; r := r||case when f.match_code='B1' then 'PASS ' else 'FAIL ' end||'tick auto call -> '||coalesce(f.match_code,'-')||E'\n';

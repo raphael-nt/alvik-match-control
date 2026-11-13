@@ -1,4 +1,4 @@
-// ไลบรารีกลางของทั้ง 3 เว็บ ข้อมูลสด นาฬิกา และตัวช่วยแสดงผล
+// Shared library for all pages: live data, clock and display helpers
 export const SB_URL = "https://sylaqdubfjgmaxhtrrnk.supabase.co";
 export const SB_KEY = "sb_publishable_9x3-7C7fLbQZBDtkk8YAGw_P1XclMv8";
 export const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -12,7 +12,7 @@ export const S = { standings: [], ranking: [], net: "wait", offset: 0, ready: fa
 const listeners = new Set();
 export const onChange = (f) => { listeners.add(f); return () => listeners.delete(f); };
 let pending = 0;
-const notify = () => { if (pending) return; pending = requestAnimationFrame(() => { pending = 0; listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); }); };
+const notify = () => { if (pending) return; pending = setTimeout(() => { pending = 0; listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); }, 16); };
 
 export const event = () => T.a2_event.get(1) || { name: "", setup_ms: 60000, game_ms: 90000, field_count: 2, tv_mode: "auto" };
 export const teamsArr = () => [...T.a2_team.values()].sort((a, b) => a.seed - b.seed);
@@ -38,7 +38,7 @@ export const fmtTime = (iso) => { if (!iso) return ""; const d = new Date(iso); 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export const $ = (id) => document.getElementById(id);
 
-// ---------- นาฬิกา ----------
+// ---------- Clock ----------
 export const now = () => Date.now() + S.offset;
 export async function syncClock() {
   let best = null;
@@ -64,7 +64,7 @@ export function fieldPhaseLabel(f) {
   return PHASE_TH[f.phase] || f.phase;
 }
 
-// ---------- ตัวทำนายผลเกม (ใช้แสดงผลล่วงหน้าเท่านั้น ผลจริงตัดสินที่ฐานข้อมูล) ----------
+// ---------- v2 result preview (display only, the database decides) ----------
 export function previewDecide(g) {
   const rf = g.red_parked >= 3, bf = g.blue_parked >= 3;
   const W = (side, method) => ({ side, method });
@@ -78,7 +78,7 @@ export function previewDecide(g) {
 }
 export const REASON_TH = { replay: "ผลเท่ากันทุกอย่าง ต้องแข่งใหม่ด้วยแบบสนามเดิม (FAQ 34)", judge: "ไม่มีทีมไหนออกจากกรอบแดง กรรมการต้องตัดสิน (FAQ 35)" };
 
-// ---------- โหลดและติดตามข้อมูล ----------
+// ---------- Load and subscribe to data ----------
 export async function loadAll() {
   const q = (t) => sb.from(t).select("*");
   const [ev, tm, ma, ga, fi, tb, st, rk, gr] = await Promise.all([q("a2_event"), q("a2_team"), q("a2_match"), q("a2_game"), q("a2_field"), q("a2_tiebreak"), sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*"), q("a2_group")]);
@@ -140,9 +140,9 @@ export function beep(f = 880, ms = 160) {
 export const netBadge = () => `<span class="netdot wait" data-net><i></i><b>กำลังเชื่อม</b></span>`;
 export function raf(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
 
-// ---------- v3 สนามเดียว นาฬิกากลาง ----------
+// ---------- v3 single field, central clock ----------
 export const marksOf = (gid) => [...T.a2_mark.values()].filter((m) => m.game_id === gid).sort((a, b) => a.created_at.localeCompare(b.created_at));
-// คืน { phase, ms (ค่าที่แสดง), elapsed (ตั้งแต่ GO), count (วินาทีนับถอยหลัง) }
+// Returns { phase, ms (shown value), elapsed (since GO), count (countdown seconds) }
 export function clockV3(f) {
   const ev = event(), gm = ev.game_ms || 90000;
   if (!f || !f.match_code) return { phase: "empty", ms: gm, elapsed: 0 };
@@ -163,7 +163,7 @@ export function clockV3(f) {
 }
 export const PHASE_EN = { empty: "Waiting", idle: "Idle", setup: "Setup", ready: "Ready", countdown: "Countdown", game: "Live", stopped: "Stopped", over: "Time up" };
 export const fmtMs1 = (ms) => { if (ms == null) return "-"; const d = Math.max(0, Math.floor(ms / 100)); const s = Math.floor(d / 10); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + "." + (d % 10); };
-// ตัวตัดสิน v3 ตรงกับ a2_decide ในฐานข้อมูล (ใช้แสดงล่วงหน้า)
+// v3 decider, mirrors a2_decide in the database (preview only)
 export function decideV3(g) {
   if (!g) return { need: "judge" };
   if (g.complete_side === "red" || g.complete_side === "blue") return { side: g.complete_side, method: "full" };

@@ -1,55 +1,50 @@
 # Alvik Match Control
 
-ระบบจัดการแข่งขัน Arduino Alvik Smart Logistics Challenge (9 ทีม) แยกเป็น 3 เว็บ ข้อมูลสดผ่าน Supabase Realtime
+Match control for the Arduino Alvik Smart Logistics Challenge (9 teams). Three web pages share live data through Supabase Realtime. One field, one match at a time, one central clock.
 
-เปิดใช้งานที่ https://raphael-nt.github.io/alvik-match-control/
+Live at https://raphael-nt.github.io/alvik-match-control/
 
-| เว็บ | ลิงก์ | ใช้โดย |
+| Page | Path | Used by |
 |---|---|---|
-| Admin | `/admin/` | ผู้จัด เรียกคู่ แก้ Event log จัดการทุกอย่าง |
-| Dashboard | `/dashboard/` | จอใหญ่ นาฬิกากลาง 3 2 1 รอบที่แข่ง ตารางสาย (`/tv/` พาไปที่นี่) |
-| Referee | `/ref/` | มือถือหรือ iPad 1 เครื่อง จับเวลาและกด Checklist ตามเกณฑ์ |
+| Admin | `/admin/` | Organizer. Calls matches, sets the schedule, edits the event log, manages teams |
+| Dashboard | `/dashboard/` | Big screen. Central clock with 3 2 1 countdown, current match, bracket (`/tv/` redirects here) |
+| Referee | `/ref/` | One phone or iPad. Runs the clock and records each judging criterion |
 
-หน้ากรรมการเข้าสนามได้เมื่อแอดมินเปิดคิวของสนามนั้นแล้วเท่านั้น (กดเปิดเอง หรือตั้งเวลาให้ระบบเปิดให้)
+## First run
 
-แอดมินเปิดมาที่แท็บ "ภาพรวม" ตารางสายอยู่ด้านบน นาฬิกาของแต่ละสนามอยู่ขวาล่างตามเวลาที่กรรมการกด
+1. Open `/admin/` before sharing any links. Set the admin password (6+ characters) and the referee PIN (4 to 8 digits). This can only be done once.
+2. Teams tab: enter the 9 team names. Use Shuffle to draw groups, then Start draw to reveal names on the Dashboard.
+3. Settings tab: setup time, game time, countdown seconds, and QR codes for each page.
+4. Schedule tab: set the first match time and interval, press Auto fill, check, then Save schedule.
 
-## เริ่มใช้ครั้งแรก
+## Match day
 
-1. ผู้จัดเปิด `/admin/` ก่อนใคร ตั้งรหัสผ่านแอดมิน (6 ตัวขึ้นไป) และ PIN กรรมการ (ตัวเลข 4 ถึง 8 หลัก) ตั้งได้ครั้งเดียว ดังนั้นอย่าแจกลิงก์ก่อน
-2. แท็บ "ทีม" ใส่ชื่อทีม 9 ทีม ใช้ปุ่มสุ่มสลับสายได้ แล้วกด "เริ่มเผยชื่อทีมบน TV" ถ้าจะจับสายบนจอ
-3. แท็บ "ตั้งค่า" ตั้งเวลา Setup เวลาแข่ง จำนวนสนาม และดู QR ของแต่ละหน้า
-4. แท็บ "ตั้งเวลา" ใส่เวลาเริ่มคู่แรก ระยะห่างต่อรอบ แล้วกด "เติมให้อัตโนมัติ" ตรวจแล้วกดบันทึก
+- Admin presses **Call next match** in the Queue tab, or the system calls it at the scheduled time when the field is free.
+- Referee signs in with the PIN, picks or randomizes the field pattern, starts setup, ticks the pre-start checklist, then presses **Start**. All screens count 3 2 1 together.
+- During the game the referee presses the color of the side that did it first, once per criterion:
+  1. Left red box first (rule 5.3)
+  2. First lift (rule 5.1)
+  3. Stands parked now, counter 0 to 3 per side (rule 5.4)
+  4. Mission complete, hold to stop the clock immediately (rule 6.1, FAQ 33)
+- Same time, Retry, Undo and False start are available. Taps are saved on the phone first and resent until the server accepts them.
+- Review shows the result by rule 6. A full tie becomes a replay with the same pattern (FAQ 34). If no robot left the red box, the referee decides (FAQ 35).
+- Admin can fix anything afterwards in the event log of each game. Results and standings are recomputed.
 
-## วันแข่ง
+## Format
 
-- ถึงรอบไหน ระบบเปิดคิวให้ตามเวลา หรือแอดมินกด "เปิดคิว" ในแท็บ "คิวสนาม" เองได้ก่อนเวลา
-- กรรมการเปิด `/ref/` ใส่ PIN เลือกสนาม เลือกแบบสนาม 1 ถึง 3 กดเริ่ม Setup และเริ่มเวลาแข่ง
-- ระหว่างแข่งกด +1 แท่น ยกแท่นแรก ออกจากกรอบแดง ทีวีและแอดมินเห็นทันที จบเกมด้วยการกดค้าง
-- ผลเสมอ ระบบสั่งแข่งใหม่ด้วยแบบสนามเดิม (FAQ 34) หรือให้กรรมการเลือกผู้ชนะ (FAQ 35)
-- ทีมไม่มา แท็บ "ทีม" ติ๊ก "ไม่มา" ทีมนั้นแพ้บายทุกคู่ที่เหลือ (ผู้ชนะได้ 2-0 ใน Bo3) หรือรายคู่ กดชิปคู่ในตารางสายแล้วกด "ไม่มา แพ้บาย"
-- แอดมินแก้ได้ทุกอย่างหลังกรรมการ เช่น แก้ตัวเลข ให้ทีมใดชนะเกม เพิ่มหรือลบเกม สลับฝั่ง และกด "ขึ้น" ในแท็บ "สายและอันดับ" เมื่อเสมอกันทุกเกณฑ์
-- ข้อมูลค้างตลอด รีเฟรชหรือเปลี่ยนเครื่องได้ ไม่หาย
-
-## รูปแบบการแข่งขัน
-
-| รอบ | สาย | ทีม | เข้ารอบ |
+| Round | Group | Teams | Advance |
 |---|---|---|---|
-| รอบแรก | A B C | สายละ 3 ทีม (ลำดับ 1-3, 4-6, 7-9) | ที่ 1 และ 2 ของแต่ละสาย |
-| รอบสอง | D | ที่ 1 สาย A, ที่ 1 สาย C, ที่ 2 สาย B | ที่ 1 ชิงแชมป์ |
-| รอบสอง | E | ที่ 1 สาย B, ที่ 2 สาย A, ที่ 2 สาย C | ที่ 1 ชิงแชมป์ |
-| ชิงชนะเลิศ | F | ที่ 1 สาย D กับ ที่ 1 สาย E | Bo5 |
+| Round 1 | A B C | 3 teams each (seeds 1-3, 4-6, 7-9) | 1st and 2nd |
+| Round 2 | D | 1st A, 1st C, 2nd B | 1st to final |
+| Round 2 | E | 1st B, 2nd A, 2nd C | 1st to final |
+| Final | F | 1st D vs 1st E | Bo5 |
 
-ในสายพบกันหมด ทุกคู่ Bo3 รวม 16 คู่ จัดอันดับตามคู่ที่ชนะ ผลต่างเกม เกมที่ชนะ ผลคู่ที่เจอกัน แล้วกรรมการตัดสิน อันดับรวม 1 แชมป์ 2 รองแชมป์ 3= ที่ 2 สาย D และ E 5= ที่ 3 สาย D และ E 7= ที่ 3 สาย A B C
+Round robin, every match Bo3, 16 matches in total. Ranking: matches won, game difference, games won, head to head, then referee decision. Final ranking: 1 champion, 2 runner-up, 3= 2nd of D and E, 5= 3rd of D and E, 7= 3rd of A, B and C.
 
-## เทคนิค
+## Technical notes
 
-- เว็บเป็น HTML กับ JavaScript ธรรมดา ไม่ต้อง build เสิร์ฟจาก GitHub Pages ได้ทันที
-- ฐานข้อมูล Supabase ตารางขึ้นต้น `a2_` เขียนผ่านฟังก์ชัน (RPC) เท่านั้น ผู้เข้าชมทั่วไปอ่านได้อย่างเดียว SQL อยู่ใน `supabase/migrations/`
-- รายละเอียดการออกแบบและสิ่งที่ต่างจากแบบ อยู่ใน `docs/DESIGN.md`
-- `index.html` ที่รากเป็นเมนูลิงก์ไป 3 เว็บ ระบบ v1 เดิมย้ายไป `/legacy/`
-- ข้อจำกัด ยังไม่มีคิวออฟไลน์ของกรรมการ ถ้าเน็ตหลุดจะกดไม่ได้จนกว่าจะต่อใหม่ ส่งผลออกเป็น JSON ไม่มี Excel
-
-## v3 (13 พ.ย. 2569)
-
-สนามเดียว แข่งทีละคู่ นาฬิกากลางเรือนเดียว กรรมการกดฝั่งที่ทำได้ก่อนตามเกณฑ์ ระบบเก็บเป็น Event log ใน `a2_mark` แล้วตัดสินตามกติกาข้อ 6 รายละเอียดใน `docs/DESIGN_v3.md` และ `supabase/migrations/008_v3_single_field.sql` ทดสอบ SQL ด้วย `supabase/tests/008_v3_test.sql`
+- Plain HTML and JavaScript ES modules, no build step, served from GitHub Pages.
+- Supabase tables start with `a2_`. Every write goes through a SECURITY DEFINER RPC that checks the admin password or the referee PIN, device and session. Anonymous users can only read.
+- SQL is in `supabase/migrations/` (001 to 008). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
+- Design: `docs/DESIGN_v3.md` (current) and `docs/DESIGN.md` (v2 and how it was built).
+- `index.html` at the root links to the three pages. The old v1 system lives in `/legacy/`.
