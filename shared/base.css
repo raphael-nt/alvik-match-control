@@ -36,3 +36,12 @@ input,select{min-height:40px;padding:6px 10px;border:1px solid var(--line);borde
 .toast.bad{background:var(--red)}
 .sr{position:absolute;left:-9999px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Popup for documents (shared by Admin and Referee) and a clear close button */
+.pop{position:fixed;inset:0;z-index:40;background:#000c;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 0}
+.pop-h{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--teal);color:#fff}.pop-h b{flex:1;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pop-b{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:8px;display:grid;gap:8px;justify-items:start;justify-content:safe center;align-content:start;background:#2a3033}
+.pop-page{background:#fff;box-shadow:0 2px 10px #0006}
+.pz{width:36px;height:36px;border-radius:8px;border:1.5px solid #ffffffaa;background:transparent;color:#fff;font-size:22px;font-weight:700;line-height:1;cursor:pointer;flex:none}.pop-img{max-width:100%;height:auto}
+.pop-msg{color:#fff;padding:20px}
+.xbtn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#16191B;border:0;border-radius:99px;padding:7px 14px 7px 10px;font:inherit;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 1px 4px #0004;flex:none}
+.xbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round}

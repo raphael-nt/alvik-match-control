@@ -1,7 +1,7 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
 import { useMarks, connect, onChange, paintNet, rpc, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
-import { listDocs, openDoc, docRows } from "../shared/docs.js";
+import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 
 useMarks();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -269,27 +269,39 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && pi
 render();
 
 // ---------- Bracket and documents sheet (opened from the top bar icons) ----------
-let sheet = "";
-// On a phone the full bracket would shrink below readable size, so keep at least 75% scale and let the sheet scroll sideways
-function sizeSheetBracket(el) {
-  const w = el.querySelector(".bkw"), bk = w && w.querySelector("[data-bk]"); if (!bk) return;
-  w.style.width = Math.max(w.parentElement.clientWidth - 24, +bk.dataset.w * 0.75) + "px"; fitBrackets(el);
+// The bracket starts scaled to fit the screen; + and - zoom in steps and the sheet scrolls. Live updates keep zoom and scroll.
+let sheet = "", zoom = 0, bkHtml = "";
+const sheetClose = closeX.replace("data-xclose", 'data-sheet=""');
+function bracketScale(el) {
+  const box = el.querySelector(".sh-b"), bk = el.querySelector("[data-bk]"); if (!box || !bk) return;
+  const W = +bk.dataset.w, H = +bk.dataset.h, fit = Math.min((box.clientWidth - 16) / W, (box.clientHeight - 16) / H);
+  const k = zoom ? Math.max(fit, Math.min(1.5, zoom)) : fit, st = bk.firstElementChild;
+  bk.style.width = W * k + "px"; bk.style.height = H * k + "px"; st.style.transform = `scale(${k})`;
+  const z = el.querySelector("[data-zv]"); if (z) z.textContent = Math.round((k / fit) * 100) + "%";
+}
+function paintBracket(el) {
+  const html = bracketHtml({}); if (html === bkHtml && el.querySelector("[data-bk]")) return;
+  bkHtml = html; const box = el.querySelector(".sh-b"), x = box.scrollLeft, y = box.scrollTop;
+  box.innerHTML = html; bracketScale(el); box.scrollLeft = x; box.scrollTop = y;
 }
 function paintSheet() {
   let el = $("sheet");
-  if (!sheet) { if (el) el.remove(); return; }
+  if (!sheet) { if (el) el.remove(); bkHtml = ""; return; }
   if (!el) { el = document.createElement("div"); el.id = "sheet"; document.body.append(el); }
-  const head = (t) => `<div class="sh-h"><b>${t}</b><button class="btn small" data-sheet="">Close</button></div>`;
-  if (sheet === "bracket") { el.innerHTML = `${head("Bracket")}<div class="sh-b"><div class="bkw">${bracketHtml({})}</div></div>`; sizeSheetBracket(el); }
-  else {
-    el.innerHTML = `${head("Rules and FAQ")}<div class="sh-b" id="shdocs"><p class="muted">Loading</p></div>`;
+  if (sheet === "bracket") {
+    el.innerHTML = `<div class="sh-h"><b>Bracket</b><span class="zm"><button class="ib dark" data-zoom="-1" aria-label="Zoom out">−</button><span data-zv>100%</span><button class="ib dark" data-zoom="1" aria-label="Zoom in">+</button></span>${sheetClose}</div><div class="sh-b bkbox"></div>`;
+    bkHtml = ""; paintBracket(el);
+  } else {
+    el.innerHTML = `<div class="sh-h"><b>Rules and FAQ</b>${sheetClose}</div><div class="sh-b" id="shdocs"><p class="muted">Loading</p></div>`;
     listDocs({ p_pin: pin }).then((d) => { const b = $("shdocs"); if (b) b.innerHTML = docRows(d, false); }).catch((e) => { const b = $("shdocs"); if (b) b.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
   }
 }
 document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-sheet]"); if (b) { sheet = b.dataset.sheet; paintSheet(); return; }
-  const d = e.target.closest("[data-doc]"); if (d) openDoc(+d.dataset.doc, { p_pin: pin }).catch((x) => toast(x.message, true));
+  const b = e.target.closest("[data-sheet]"); if (b) { sheet = b.dataset.sheet; zoom = 0; paintSheet(); return; }
+  const z = e.target.closest("[data-zoom]");
+  if (z) { const el = $("sheet"), bk = el.querySelector("[data-bk]"), cur = parseFloat(bk.firstElementChild.style.transform.slice(6)) || 1; zoom = cur * (z.dataset.zoom === "1" ? 1.25 : 0.8); bracketScale(el); return; }
+  const d = e.target.closest("[data-doc]"); if (d) showDoc(+d.dataset.doc, { p_pin: pin }, d.dataset.t);
 });
 // Keep the bracket current while it is open, and close the documents sheet if the admin turns it off
-onChange(() => { if (sheet === "bracket") paintSheet(); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
-addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") sizeSheetBracket(el); });
+onChange(() => { const el = $("sheet"); if (el && sheet === "bracket") paintBracket(el); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
+addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") bracketScale(el); });
