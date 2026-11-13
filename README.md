@@ -13,7 +13,7 @@ Live at https://raphael-nt.github.io/alvik-match-control/
 ## First run
 
 1. Open `/admin/` before sharing any links. Set the admin password (6+ characters) and the referee PIN (4 to 8 digits). This can only be done once.
-2. Teams tab: enter the 9 team names. Use Shuffle to draw groups, then Start draw to reveal names on the Dashboard.
+2. Teams tab: set the format (groups, teams per group, how many advance, Bo for groups, knockout and final) and press Apply format. Groups play round robin, then a knockout bracket to the final. Then enter team names. Use Shuffle to draw groups, then Start draw to reveal names on the Dashboard.
 3. Settings tab: setup time, game time, countdown seconds, and QR codes for each page.
 4. Schedule tab: set the first match time and interval, press Auto fill, check, then Save schedule.
 
@@ -39,12 +39,14 @@ Live at https://raphael-nt.github.io/alvik-match-control/
 | Round 2 | E | 1st B, 2nd A, 2nd C | 1st to final |
 | Final | F | 1st D vs 1st E | Bo5 |
 
+The table above is the default 9 team layout. Any format set in the Teams tab replaces it.
+
 Round robin, every match Bo3, 16 matches in total. Ranking: matches won, game difference, games won, head to head, then referee decision. Final ranking: 1 champion, 2 runner-up, 3= 2nd of D and E, 5= 3rd of D and E, 7= 3rd of A, B and C.
 
 ## Technical notes
 
 - Plain HTML and JavaScript ES modules, no build step, served from GitHub Pages.
 - Supabase tables start with `a2_`. Every write goes through a SECURITY DEFINER RPC that checks the admin password or the referee PIN, device and session. Anonymous users can only read.
-- SQL is in `supabase/migrations/` (001 to 008). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
+- SQL is in `supabase/migrations/` (001 to 009). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
 - Design: `docs/DESIGN_v3.md` (current) and `docs/DESIGN.md` (v2 and how it was built).
 - `index.html` at the root links to the three pages. The old v1 system lives in `/legacy/`.
