@@ -2,7 +2,13 @@
 import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc } from "./common.js";
 import { STAGE_EN, KO_ORDER } from "./format.js";
 
-const COLW = 300, GAP = 110, HH = 36, RH = 34, CH = 40, VGAP = 18, TOP = 96, MINH = 620;
+// Box sizes. bracketHtml({ compact: true }) swaps in shorter rows with no match chips and no champion box,
+// for short panels such as the Live screen strip
+const FULL = { COLW: 300, GAP: 110, HH: 36, RH: 34, CH: 40, VGAP: 18, TOP: 96, MINH: 620 };
+const COMPACT = { COLW: 300, GAP: 90, HH: 30, RH: 28, CH: 8, VGAP: 10, TOP: 0, MINH: 0 };
+let COLW, GAP, HH, RH, CH, VGAP, TOP, MINH;
+const useDims = (d) => ({ COLW, GAP, HH, RH, CH, VGAP, TOP, MINH } = d);
+useDims(FULL);
 
 function columns() {
   const cols = [], gs = groups();
@@ -72,9 +78,11 @@ function champHtml(boxes) {
 
 // Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens
 export function bracketHtml(opts = {}) {
+  useDims(opts.compact ? COMPACT : FULL);
   const { boxes, W, H } = layout();
-  const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable)).join("") + champHtml(boxes);
-  return `<div class="bk${opts.dark ? " dark" : ""}" data-bk data-w="${W}" data-h="${H}"${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wires(boxes)}</svg>${body}</div></div>`;
+  const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable)).join("") + (opts.compact ? "" : champHtml(boxes));
+  const wireHtml = wires(boxes); useDims(FULL);
+  return `<div class="bk${opts.dark ? " dark" : ""}${opts.compact ? " compact" : ""}" data-bk data-w="${W}" data-h="${H}"${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wireHtml}</svg>${body}</div></div>`;
 }
 
 // Scale the bracket to fit its box. Call after every render

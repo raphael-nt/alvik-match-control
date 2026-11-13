@@ -267,7 +267,7 @@ function layMock(k) {
     info: `<div class="mk-i"><span>Group stage</span><span>Group <b>A</b></span><span>Match <b>A1</b></span><span>Game <b>1 of 3</b></span>${rules ? `<span>Pattern <b>2</b></span>` : ""}</div>`,
     red: tm("red", "Sample Team A", 1), blue: tm("blue", "Sample Team B", 0),
     clock: `<div class="mk-c">${rules ? `<div class="t">1:30.0</div><div class="p">Running</div>` : `<div class="t">1-0</div><div class="p">Game 1 of 3</div>`}</div>`,
-    bracket: `<div class="mk-b">${bracketHtml({ dark: true })}</div>`,
+    bracket: `<div class="mk-b">${bracketHtml({ dark: true, compact: true })}</div>`,
     upnext: `<div class="mk-u"><h3>Up next</h3><div><b>A2</b><span>Team C vs Team D</span></div><div><b>B1</b><span>Team E vs Team F</span></div><div><b>B2</b><span>Team G vs Team H</span></div></div>`,
   }[k];
 }
