@@ -1,4 +1,4 @@
-// ตารางสายการแข่งแบบเส้นลากชี้ วาดจากข้อมูลกลุ่มในฐานข้อมูล ใช้ร่วมกันทั้ง TV และแอดมิน
+// Bracket drawn with connector lines, built from group data
 import { T, S, groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc } from "./common.js";
 
 const W = 1520, H = 620, COLW = 320, COLX = [0, 600, 1200], HH = 36, RH = 34, CH = 40;
@@ -75,14 +75,14 @@ function champHtml(boxes) {
   return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${fb.y - 84}px;width:${COLW}px"><span>แชมป์</span><b>${w != null ? esc(teamName(w)) : "รอผลคู่ชิง"}</b></div>`;
 }
 
-// html ของตารางสาย opts.clickable ให้ชิปแต่ละคู่กดได้ (data-act="edit") opts.dark ธีมมืด opts.maxh ความสูงสูงสุดของกรอบ (px)
+// Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens
 export function bracketHtml(opts = {}) {
   const boxes = layout();
   const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable)).join("") + champHtml(boxes);
   return `<div class="bk${opts.dark ? " dark" : ""}" data-bk${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wires(boxes)}</svg>${body}</div></div>`;
 }
 
-// ปรับขนาดตารางสายให้พอดีกรอบ เรียกหลังวาดทุกครั้ง
+// Scale the bracket to fit its box. Call after every render
 export function fitBrackets(root = document) {
   root.querySelectorAll("[data-bk]").forEach((el) => {
     const st = el.firstElementChild, maxh = +el.dataset.maxh || Infinity, w = el.clientWidth || el.parentElement.clientWidth;

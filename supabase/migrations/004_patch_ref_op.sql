@@ -1,4 +1,4 @@
--- ใช้หลัง 003 แก้ a2_ref_op ให้แก้ไขได้ตอนอยู่สถานะ review
+-- Run after 003: allow a2_ref_op edits while the game is in review
 do $$ declare d text; begin
   d := pg_get_functiondef('public.a2_ref_op(text,text,int,uuid,bigint,text,text,int)'::regprocedure);
   d := replace(d, 'if g.status<>''live'' then raise exception ''locked: เกมไม่ได้กำลังแข่ง''', 'if g.status not in (''live'',''review'') then raise exception ''locked: เกมไม่ได้กำลังแข่ง''');

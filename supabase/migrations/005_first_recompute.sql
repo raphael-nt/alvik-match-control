@@ -1,2 +1,2 @@
--- หลังตั้งต้นข้อมูล คำนวณสถานะคู่ครั้งแรก ให้คู่ในรอบแรกขึ้นสถานะพร้อม
+-- After seeding, compute match status once so round 1 matches become ready
 select a2_recompute();

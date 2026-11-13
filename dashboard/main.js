@@ -1,4 +1,4 @@
-// Dashboard (เดิมจอ TV) docs/DESIGN_v3.md ข้อ 5
+// Dashboard (formerly TV), docs/DESIGN_v3.md section 5
 import { useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 
@@ -73,7 +73,7 @@ function render() {
 onChange(render); connect();
 setInterval(() => { if (cur === "draw") render(); }, 800);
 
-// ---------- นาฬิกา เสียง 3 2 1 และแถบผล 8 วินาที ----------
+// ---------- Clock, 3 2 1 sound and 8 second result banner ----------
 let lp = null, ls = null, lastDone = null, bnUntil = 0;
 raf(() => {
   const f = field(1), ct = $("ct"); if (!f || !ct) return;

@@ -1,7 +1,7 @@
--- แพ้บาย (ทีมไม่มา)
--- a2_match.forfeit  ฝั่งที่แพ้บาย ตั้งเองรายคู่ ('red' หรือ 'blue')
--- a2_match.walkover ฝั่งที่แพ้บายจริง คำนวณจาก forfeit หรือจากธง absent ของทีม
--- a2_team.absent    ทีมไม่มา แพ้บายทุกคู่ที่เหลือ
+-- Forfeit (team absent)
+-- a2_match.forfeit  side set to forfeit for one match ('red' or 'blue')
+-- a2_match.walkover side that actually forfeits, computed from forfeit or the team's absent flag
+-- a2_team.absent    team absent, forfeits every remaining match
 alter table a2_match add column if not exists forfeit text check (forfeit in ('red','blue'));
 alter table a2_match add column if not exists walkover text check (walkover in ('red','blue'));
 alter table a2_team add column if not exists absent boolean not null default false;
