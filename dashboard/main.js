@@ -44,7 +44,8 @@ function liveView() {
   };
   return `${head("● LIVE")}${Object.entries(L).filter(([, p]) => p.on).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
 }
-function bracketView() { return `${head("Bracket")}<div class="bkarea">${bracketHtml({ dark: true, maxh: 760 })}</div><div class="lb" style="height:auto;grid-template-columns:1fr">${upNextHtml()}</div>`; }
+// Bracket fills the height; Up next sits in a narrow column on the right
+function bracketView() { return `${head("Bracket")}<div class="bkfull"><div class="bkarea">${bracketHtml({ dark: true, maxh: 940 })}</div>${upNextHtml()}</div>`; }
 function tableRows(G, adv) {
   const rows = tableOf(G).map((r) => `<tr class="${r.sure && r.pos <= adv ? "q" : ""}"><td class="p">${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) + (teamAbsent(r.seed) ? " (absent)" : "") : "TBD"}</td><td class="n">${r.mw}-${r.ml}</td><td class="n">${r.gw}-${r.gl}</td></tr>`).join("");
   return `<tr class="th"><td></td><td></td><td class="n">W-L</td><td class="n">Games</td></tr>` + rows;
