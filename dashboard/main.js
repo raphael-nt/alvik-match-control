@@ -31,11 +31,11 @@ function liveView() {
   const ms = g ? marksOf(g.id).filter((x) => !x.voided) : [], one = (k) => ms.find((x) => x.kind === k);
   const ev = (x, s) => (x && (x.side === s || x.side === "both") ? `<b>${fmtMs1(x.t_ms)}</b>` : x ? "-" : "waiting");
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="k">${s.toUpperCase()}</div><div class="n">${esc(sideName(m, s))}</div><div class="w">${m[s + "_wins"]}</div>
-    <div class="pk">${[1, 2, 3].map((i) => `<i class="${g && i <= g[s + "_parked"] ? "on" : ""}"></i>`).join("")}</div>
-    <div class="ev"><span>Left red box first ${ev(one("exit_first"), s)}</span><span>First lift ${ev(one("lift_first"), s)}</span><span>Retries ${g ? g[s + "_retries"] || 0 : 0}</span></div></div>`;
+    ${event().rules_mode === false ? "" : `<div class="pk">${[1, 2, 3].map((i) => `<i class="${g && i <= g[s + "_parked"] ? "on" : ""}"></i>`).join("")}</div>
+    <div class="ev"><span>Left red box first ${ev(one("exit_first"), s)}</span><span>First lift ${ev(one("lift_first"), s)}</span><span>Retries ${g ? g[s + "_retries"] || 0 : 0}</span></div>`}</div>`;
   const gn = g ? gameNo(m.code, g) : 1;
-  return `${head("● LIVE")}<div class="live"><div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span><span>Pattern <b>${g?.pattern || "-"}</b></span></div>
-    <div class="lv">${tm("red")}<div class="lc"><div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div></div>${tm("blue")}</div>
+  return `${head("● LIVE")}<div class="live"><div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${event().rules_mode === false ? "" : `<span>Pattern <b>${g?.pattern || "-"}</b></span>`}</div>
+    <div class="lv">${tm("red")}<div class="lc">${event().rules_mode === false ? `<div class="t" style="font-size:200px">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>` : `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>`}</div>${tm("blue")}</div>
     <div class="lb"><div class="bkarea">${bracketHtml({ dark: true, maxh: 280 })}</div>${upNextHtml()}</div></div><div id="cd"></div><div id="bn"></div>`;
 }
 function bracketView() { return `${head("Bracket")}<div class="bkarea">${bracketHtml({ dark: true, maxh: 760 })}</div><div class="lb" style="height:auto;grid-template-columns:1fr">${upNextHtml()}</div>`; }
@@ -65,7 +65,7 @@ let key = "", cur = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
-  const k = md + JSON.stringify([event().name, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
+  const k = md + JSON.stringify([event().name, event().rules_mode, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
   stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "champion" ? champView() : bracketView();

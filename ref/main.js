@@ -131,6 +131,21 @@ function matchView(f, m, g) {
   tickClock();
 }
 
+// Simple mode (rules off): only the winner of each game
+function simpleView(m, g) {
+  const done = gamesOf(m.code).filter((x) => x.status === "done");
+  const last = done[done.length - 1];
+  app.innerHTML = `${bar(m, g)}<div class="wrap">${teams(m)}
+    <section class="center"><h3 style="justify-content:center">Game ${gameNo(m.code, g)} of ${m.bo}</h3><p class="hint">กดค้างที่สีของฝั่งที่ชนะเกมนี้</p>
+      <div class="pair"><button class="btn red big hold" style="min-height:120px" data-win="red">RED wins<i></i></button><button class="btn blue big hold" style="min-height:120px" data-win="blue">BLUE wins<i></i></button></div></section>
+    ${last ? `<p class="muted center">Last game: ${last.winner.toUpperCase()} won game ${gameNo(m.code, last)}. แก้ผลได้ที่แอดมิน</p>` : ""}
+    <div class="row"><button class="btn" id="absent">Team absent</button></div>
+    ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บายฝั่ง ${m.absent_req.toUpperCase()} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}</div>`;
+  app.querySelectorAll("[data-win]").forEach((b) => holdBind(b, 600, () => call("a2_ref_winner", { p_game: g.id, p_side: b.dataset.win }).then(() => { beep(990, 200); afterGame(m.code); }).catch(() => {})));
+  const ab = $("absent"); if (ab) ab.onclick = () => { const sd = prompt("ทีมที่ไม่มา พิมพ์ red หรือ blue"); if (sd === "red" || sd === "blue") call("a2_ref_absent", { p_side: sd }).catch(() => {}); };
+  const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
+}
+
 function liveBody(g) {
   const s = summary(g);
   const row = (no, title, rule, hint, key, done, both) => `<section class="crit${done ? " done" : ""}"><h3><span>${no}</span>${title} <small>(${rule})</small></h3>${hint ? `<p class="hint">${hint}</p>` : ""}
@@ -232,7 +247,7 @@ let key = "";
 function render(force) {
   const f = field(1), m = f && f.match_code ? match(f.match_code) : null, g = m ? openGame(m.code) : null;
   const ph = f ? clockV3(f).phase : "";
-  const k = JSON.stringify([S.ready, !!pin, ctl, f && [f.match_code, f.phase, f.session, f.checks, f.stop_ms], m && [m.status, m.red_wins, m.blue_wins, m.absent_req, m.red_seed, m.blue_seed], g && [g.id, g.version, g.status, g.need, g.pattern], g && marksOf(g.id).map((x) => x.id + x.voided), Q.length, reviewOk, finished, ph]);
+  const k = JSON.stringify([S.ready, event().rules_mode, !!pin, ctl, f && [f.match_code, f.phase, f.session, f.checks, f.stop_ms], m && [m.status, m.red_wins, m.blue_wins, m.absent_req, m.red_seed, m.blue_seed], g && [g.id, g.version, g.status, g.need, g.pattern], g && marksOf(g.id).map((x) => x.id + x.voided), Q.length, reviewOk, finished, ph]);
   if (!force && k === key) { paintNet(); return; }
   key = k;
   if (!S.ready) app.innerHTML = `<div class="login"><p class="muted">Loading</p>${netBadge()}</div>`;
@@ -240,6 +255,7 @@ function render(force) {
   else if (!m || m.status === "done" || !g) { if (ctl && f && ctl.session !== f.session && f.session) claim(); waitingView(); }
   else if (!ctl || (ctl.control && ctl.session !== f.session)) { claim(); viewOnly(m); }
   else if (!ctl.control) viewOnly(m);
+  else if (event().rules_mode === false) simpleView(m, g);
   else matchView(f, m, g);
   paintNet();
 }

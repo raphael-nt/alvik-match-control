@@ -63,3 +63,9 @@ dialog::backdrop{background:#16191Bb0}
 .btn.big{min-height:56px;font-size:18px;font-weight:600;width:100%}
 .evl tr.void td{text-decoration:line-through;color:var(--muted)}.evl td.r{color:var(--red);font-weight:600}.evl td.b{color:var(--blue);font-weight:600}
 .h2 select{min-height:32px}
+.switch{display:flex;gap:12px;align-items:center;cursor:pointer;font-weight:500}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch span{width:48px;height:28px;border-radius:99px;background:var(--line);position:relative;transition:background .15s;flex:none}
+.switch span::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s}
+.switch input:checked+span{background:var(--teal)}.switch input:checked+span::after{left:23px}
+.switch input:focus-visible+span{outline:3px solid var(--teal);outline-offset:2px}
