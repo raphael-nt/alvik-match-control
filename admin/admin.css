@@ -86,7 +86,7 @@ dialog::backdrop{background:#16191Bb0}
 /* Sample content: same container-unit sizing as dashboard/dash.css .lp */
 .mk-i{display:flex;align-items:center;gap:3cqw;font-size:min(56cqh,calc(32px * var(--sc,.5)));color:var(--muted);white-space:nowrap}.mk-i b{color:var(--ink)}
 .mk-t{background:var(--cs);border-top:calc(10px * var(--sc,.5)) solid var(--c);border-radius:calc(12px * var(--sc,.5));padding:4cqh 5cqw;display:grid;gap:3cqh;align-content:start}
-.mk-t .k{font-size:min(5cqh,9cqw);font-weight:700;color:var(--c)}.mk-t .n{font-size:min(11cqh,11cqw);font-weight:700;line-height:1.1}
+.mk-t .k{font-size:min(5cqh,9cqw);font-weight:700;color:var(--c)}.mk-t{align-content:center;justify-items:center;text-align:center}.mk-t .n{font-size:min(22cqh,13cqw);font-weight:700;line-height:1.1}
 .mk-t .w{font-size:min(22cqh,24cqw);font-weight:800;line-height:1}.mk-t .ev{font-size:min(5.4cqh,5.6cqw);color:var(--muted);display:grid;gap:2px}.mk-t .ev b{color:var(--ink)}
 .mk-t .pk{display:flex;gap:2cqw}.mk-t .pk i{width:min(10cqh,10cqw);height:min(10cqh,10cqw);border:2px solid var(--c);border-radius:3px}.mk-t .pk i.on{background:var(--c)}
 .mk-c{display:flex;flex-direction:column;justify-content:center;align-items:center}.mk-c .t{font-size:min(48cqh,26cqw);font-weight:700;line-height:1}

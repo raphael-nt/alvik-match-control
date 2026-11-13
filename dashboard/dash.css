@@ -109,7 +109,7 @@ html,body{background:#14181A;color:var(--ink);overflow:hidden;height:100%;cursor
 .lp .lh{display:flex;align-items:center;gap:3cqw;font-size:min(56cqh,32px);color:var(--muted);white-space:nowrap}
 .lp .lt{padding:4cqh 5cqw;gap:3cqh;align-content:start}
 .lp .lt .k{font-size:min(5cqh,9cqw)}
-.lp .lt .n{font-size:min(11cqh,11cqw)}
+.lp .lt{align-content:center;justify-items:center;text-align:center}.lp .lt .n{font-size:min(22cqh,13cqw)}
 .lp .lt .w{font-size:min(22cqh,24cqw)}
 .lp .lt .ev{font-size:min(5.4cqh,5.6cqw)}
 .lp .lt .pk i{width:min(10cqh,10cqw);height:min(10cqh,10cqw)}
