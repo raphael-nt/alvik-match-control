@@ -43,18 +43,26 @@ function boxHtml(b, clickable) {
   return `<div class="bk-box${isM && b.m.stage === "final" ? " fin" : ""}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><div class="bk-h" style="height:${HH}px"><b>${title}</b><span>${sub}</span></div>${rh}<div class="bk-c" style="height:${CH}px">${ms.map((m) => chipHtml(m, clickable)).join("")}</div></div>`;
 }
 function wires(boxes) {
-  const out = [];
-  const elbow = (x1, y1, x2, y2, on, k) => { const mx = x1 + 30 + (k % 5) * 12; out.push(`<path class="${on ? "on" : ""}" d="M${x1} ${y1}H${mx}V${y2}H${x2}"/>`); };
+  const ws = [];
+  const elbow = (x1, y1, x2, y2, on) => ws.push({ x1, y1, x2, y2, on });
   const from = (src, k) => {
     if (src.g && boxes["g:" + src.g]) { const sb = boxes["g:" + src.g], sr = tableOf(src.g)[src.p - 1]; return { x: sb.x + sb.w, y: rowY(sb, src.p - 1), on: !!(sr && sr.sure) }; }
     if (src.w && boxes["m:" + src.w]) { const sb = boxes["m:" + src.w], m = match(src.w); return { x: sb.x + sb.w, y: sb.y + HH + RH, on: !!(m && m.winner_seed != null) }; }
     return null;
   };
   Object.values(boxes).forEach((b, bi) => {
-    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on, bi + j); });
-    else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on, bi + j); }); }
+    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on); });
+    else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on); }); }
   });
-  return out.join("");
+  // Every wire in a column gap gets its own vertical lane so lines never run on top of each other
+  const gaps = {};
+  ws.forEach((w) => (gaps[w.x1] = gaps[w.x1] || []).push(w));
+  return Object.values(gaps).flatMap((g) => {
+    const down = g.filter((w) => w.y2 >= w.y1).sort((a, b) => b.y1 - a.y1), up = g.filter((w) => w.y2 < w.y1).sort((a, b) => a.y1 - b.y1);
+    const order = [...up, ...down], n = order.length, span = GAP - 36;
+    return order.map((w, i) => { const mx = w.x1 + 18 + (n > 1 ? (span * i) / (n - 1) : span / 2);
+      return `<path class="${w.on ? "on" : ""}" d="M${w.x1} ${w.y1}H${mx}V${w.y2}H${w.x2}"/>`; });
+  }).join("");
 }
 function champHtml(boxes) {
   const fb = boxes["m:F"]; if (!fb) return "";
