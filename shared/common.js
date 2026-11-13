@@ -155,7 +155,8 @@ export function clockV3(f) {
       if (left > 0) return { phase: "countdown", ms: gm, elapsed: 0, count: Math.ceil(left / 1000) };
       const el = Math.min(gm, -left); return { phase: el >= gm ? "over" : "game", ms: gm - el, elapsed: el };
     }
-    case "game": { const el = Math.min(gm, Math.max(0, t - Date.parse(f.go_at))); return { phase: el >= gm ? "over" : "game", ms: gm - el, elapsed: el }; }
+    case "game": { if (f.running === false) { const el = gm - (f.left_ms || 0); return { phase: "game", paused: true, ms: f.left_ms || 0, elapsed: el }; }
+      const el = Math.min(gm, Math.max(0, t - Date.parse(f.go_at))); return { phase: el >= gm ? "over" : "game", ms: gm - el, elapsed: el }; }
     case "stopped": return { phase: "stopped", ms: gm - (f.stop_ms || 0), elapsed: f.stop_ms || 0 };
     case "over": return { phase: "over", ms: 0, elapsed: gm };
     default: return { phase: "idle", ms: gm, elapsed: 0 };

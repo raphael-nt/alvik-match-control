@@ -67,7 +67,7 @@ function undo(g) {
 }
 // Clock and flow actions re-read the data right away: realtime updates can arrive seconds late,
 // and a stale screen makes the referee tap twice
-const FLOW = new Set(["a2_ref_stop", "a2_ref_setup", "a2_ref_go", "a2_ref_false_start", "a2_ref_confirm", "a2_ref_judge", "a2_ref_pattern", "a2_ref_check"]);
+const FLOW = new Set(["a2_ref_stop", "a2_ref_clock", "a2_ref_setup", "a2_ref_go", "a2_ref_false_start", "a2_ref_confirm", "a2_ref_judge", "a2_ref_pattern", "a2_ref_check"]);
 async function call(fn, args) { try { const r = await rpc(fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...args }); vib(); if (FLOW.has(fn)) loadAll().catch(() => {}); return r; } catch (e) { if (e.code === "forbidden") { ctl = null; claim(); } toast(e.message || "ส่งไม่สำเร็จ", true); throw e; } }
 
 // ---------- Referee device claim ----------
@@ -126,7 +126,7 @@ function matchView(f, m, g) {
       ${ck1("blue_in", "Blue robot fully inside red box", "ทุกส่วนอยู่ในกรอบแดง ทับเส้นได้ (FAQ 3)")}
       ${ck1("stands", `Stands placed as pattern ${g.pattern}, both sides`, "กลางแท่นตรงจุด ขอบขนานเส้นสนาม (FAQ 4)")}</section>
       <button class="btn primary huge" id="go" ${ph === "ready" && all ? "" : "disabled"}>Start</button>
-      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด Setup แตะอีกครั้งเพื่อข้าม</p>` : ""}`;
+      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด แล้วเลือกเล่นต่อหรือข้าม</p>` : ""}`;
   } else if (ph === "countdown") {
     body = `<div class="count" id="count">3</div><button class="btn danger hold" data-hold="false_start">False start (hold)<i></i></button>`;
   } else if (ph === "game") {
@@ -195,7 +195,6 @@ function reviewBody(f, m, g) {
         ${canEndCount ? `<button class="btn small" data-mk="unpark" data-s="blue" ${s.blue_parked ? "" : "disabled"}>-</button>` : ""}<b class="c-b">${s.blue_parked}${ko(s, "blue")}</b>${canEndCount ? `<button class="btn small" data-mk="park" data-s="blue" ${s.blue_parked >= 3 ? "disabled" : ""}>+</button>` : ""}</span></div>
       ${ln("Knockout", ev(s.complete))}${ln("Retries", `<b class="c-r">${s.red_retries}</b> <b class="c-b">${s.blue_retries}</b>`)}
       ${!s.exit && !s.lift ? `<div class="row">${["red", "blue"].map((x) => `<button class="btn small" data-mk="exit_first" data-s="${x}">+ ${x.toUpperCase()} left box</button>`).join("")}</div>` : ""}
-      <button class="btn small" id="undo" ${s.marks.some((x) => x.kind !== "complete") ? "" : "disabled"}>Undo last</button>
     </section>
     <section class="result"><div class="muted">Result</div><h2>${p.side ? `<span class="${p.side === "red" ? "c-r" : "c-b"}">${p.side.toUpperCase()} wins</span>` : p.need === "replay" ? "Tie, replay" : "Referee decides"}</h2>
       <div>${p.side ? RULE_EN[p.method] + " · " + RULE_TH[p.method] : p.need === "replay" ? "ผลเท่ากันทุกอย่าง แข่งใหม่ทันทีแบบสนามเดิม (FAQ 34)" : "ไม่มีทีมไหนออกจากกรอบแดง (FAQ 35)"}</div></section>
@@ -238,7 +237,7 @@ function holdBind(btn, ms, fn) {
 let lastSec = null, lastPh = null;
 function tickClock() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
-  const ct = $("ct"); if (ct) { ct.textContent = fmtMs1(ck.ms); $("cl").textContent = ck.paused ? "Paused · tap to skip setup" : ck.phase === "setup" || ck.phase === "game" ? PHASE_EN[ck.phase] + " · tap to stop" : PHASE_EN[ck.phase]; $("clock").classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); }
+  const ct = $("ct"); if (ct) { ct.textContent = fmtMs1(ck.ms); $("cl").textContent = ck.paused ? "Paused · tap for options" : ck.phase === "setup" || ck.phase === "game" ? PHASE_EN[ck.phase] + " · tap to pause" : PHASE_EN[ck.phase]; $("clock").classList.toggle("paused", !!ck.paused); $("clock").classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); }
   const cn = $("count"); if (cn && ck.count) cn.textContent = ck.count;
   const sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
   const pPh = lastPh, pSec = lastSec; lastPh = ck.phase; lastSec = sec;
@@ -314,21 +313,31 @@ document.addEventListener("click", (e) => {
 onChange(() => { const el = $("sheet"); if (el && sheet === "bracket") paintBracket(el); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
 addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") bracketScale(el); });
 
-// ---------- Confirm popup, tap-the-clock stop, fullscreen ----------
-function ask(title, text, okLabel) {
+// ---------- Choice popup and tap-the-clock control ----------
+// opts: [[key, label, primary?], ...]. Resolves with the key, or "" when cancelled
+function choose(title, text, opts) {
   return new Promise((done) => {
     const d = document.createElement("div"); d.className = "pop ask";
-    d.innerHTML = `<div class="ask-card"><h3>${esc(title)}</h3><p>${esc(text)}</p><div class="pair"><button class="btn big" data-a="0">ยกเลิก</button><button class="btn primary big" data-a="1">${esc(okLabel || "ยืนยัน")}</button></div></div>`;
-    d.addEventListener("click", (e) => { const b = e.target.closest("[data-a]"); if (!b && e.target !== d) return; d.remove(); done(!!b && b.dataset.a === "1"); });
+    d.innerHTML = `<div class="ask-card"><h3>${esc(title)}</h3><p>${esc(text)}</p><div class="ask-btns">${opts.map(([k, l, pr]) => `<button class="btn big${pr === "danger" ? " danger" : pr ? " primary" : ""}" data-a="${k}">${esc(l)}</button>`).join("")}<button class="btn big" data-a="">ยกเลิก</button></div></div>`;
+    d.addEventListener("click", (e) => { const b = e.target.closest("[data-a]"); if (!b && e.target !== d) return; d.remove(); done(b ? b.dataset.a : ""); });
     document.body.append(d);
   });
 }
+const ask = async (title, text, okLabel) => (await choose(title, text, [["1", okLabel || "ยืนยัน", true]])) === "1";
+const clockAct = (a) => call("a2_ref_clock", { p_action: a }).then(() => beep(a === "resume" ? 990 : 440, 300)).catch(() => {});
 document.addEventListener("click", async (e) => {
   if (!e.target.closest("[data-stop]") || !pin || !ctl?.control) return;
   const ck = clockV3(field(1));
-  if (ck.phase === "setup" && !ck.paused) { if (await ask("หยุดเวลา Setup", "หยุดนับเวลา Setup ไว้ แตะเวลาอีกครั้งเพื่อข้ามไป Ready", "หยุดเวลา")) call("a2_ref_stop", {}).catch(() => {}); }
-  else if (ck.phase === "setup" && ck.paused) { if (await ask("ข้าม Setup", "ไปขั้น Ready เพื่อตรวจรายการและเริ่มเกม", "ข้าม Setup")) call("a2_ref_setup", { p_action: "skip" }).catch(() => {}); }
-  else if (ck.phase === "game") { if (await ask("หยุดเวลาเกม", "เวลาหยุดทันทีและย้อนกลับไม่ได้ ตัดสินตามข้อ 6.2 ถึง 6.4 แก้คะแนนได้หลังหยุด", "หยุดเวลา")) call("a2_ref_stop", {}).then(() => beep(440, 600)).catch(() => {}); }
+  if (ck.phase === "setup" && !ck.paused) { if (await ask("หยุดเวลา Setup", "หยุดนับเวลา Setup ไว้ก่อน", "หยุดเวลา")) clockAct("pause"); }
+  else if (ck.phase === "setup") {
+    const k = await choose("Setup หยุดอยู่", "เล่นต่อจากเวลาที่เหลือ หรือข้ามไปขั้น Ready", [["resume", "เล่นต่อ", true], ["skip", "ข้าม Setup"]]);
+    if (k === "resume") clockAct("resume"); else if (k === "skip") call("a2_ref_setup", { p_action: "skip" }).catch(() => {});
+  }
+  else if (ck.phase === "game" && !ck.paused) { if (await ask("หยุดเวลาเกม", "หยุดเวลาไว้ก่อน กดเวลาอีกครั้งเพื่อเล่นต่อหรือจบเกม", "หยุดเวลา")) clockAct("pause"); }
+  else if (ck.phase === "game") {
+    const k = await choose("เกมหยุดอยู่", "เล่นต่อจากเวลาที่เหลือ หรือจบเกมตอนนี้ (จบแล้วย้อนไม่ได้ ตัดสินตามข้อ 6.2 ถึง 6.4)", [["resume", "เล่นต่อ", true], ["end", "จบเกม", "danger"]]);
+    if (k) clockAct(k);
+  }
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("[data-fs]")) return;

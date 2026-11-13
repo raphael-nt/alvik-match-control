@@ -43,22 +43,25 @@ function boxHtml(b, clickable) {
   const sub = isM ? `${STAGE_EN[b.m.stage] && b.m.stage !== "final" ? STAGE_EN[b.m.stage] + " · " : ""}Bo${b.m.bo}` : STAGE_EN[b.g.stage] || "";
   const rh = rowsOf(b).map((r) => {
     const up = isM ? r.win : r.sure && r.pos <= adv, out = isM ? r.lose : r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);
-    return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>absent</s>` : ""}</span><span class="s">${isM ? "" : r.mw + "-" + r.ml}</span></div>`;
+    return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>absent</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
   }).join("");
   const ms = isM ? [b.m] : matches().filter((m) => m.grp === b.g.grp);
   return `<div class="bk-box${isM && b.m.stage === "final" ? " fin" : ""}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><div class="bk-h" style="height:${HH}px"><b>${title}</b><span>${sub}</span></div>${rh}<div class="bk-c" style="height:${CH}px">${ms.map((m) => chipHtml(m, clickable)).join("")}</div></div>`;
 }
+// One colour per source group or match so each line can be followed by eye
+const WIRE_C = ["#00878F", "#E07A1F", "#7B4FC9", "#D6336C", "#2F8A4E", "#2457C5", "#B8860B"];
 function wires(boxes) {
   const ws = [];
-  const elbow = (x1, y1, x2, y2, on) => ws.push({ x1, y1, x2, y2, on });
+  const elbow = (x1, y1, x2, y2, on, src) => ws.push({ x1, y1, x2, y2, on, c: WIRE_C[(srcIdx[src] ??= Object.keys(srcIdx).length) % WIRE_C.length] });
+  const srcIdx = {};
   const from = (src, k) => {
     if (src.g && boxes["g:" + src.g]) { const sb = boxes["g:" + src.g], sr = tableOf(src.g)[src.p - 1]; return { x: sb.x + sb.w, y: rowY(sb, src.p - 1), on: !!(sr && sr.sure) }; }
     if (src.w && boxes["m:" + src.w]) { const sb = boxes["m:" + src.w], m = match(src.w); return { x: sb.x + sb.w, y: sb.y + HH + RH, on: !!(m && m.winner_seed != null) }; }
     return null;
   };
   Object.values(boxes).forEach((b, bi) => {
-    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on); });
-    else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on); }); }
+    if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on, src.g || src.w); });
+    else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on, src.g || src.w); }); }
   });
   // Every wire in a column gap gets its own vertical lane so lines never run on top of each other
   const gaps = {};
@@ -67,7 +70,7 @@ function wires(boxes) {
     const down = g.filter((w) => w.y2 >= w.y1).sort((a, b) => b.y1 - a.y1), up = g.filter((w) => w.y2 < w.y1).sort((a, b) => a.y1 - b.y1);
     const order = [...up, ...down], n = order.length, span = GAP - 36;
     return order.map((w, i) => { const mx = w.x1 + 18 + (n > 1 ? (span * i) / (n - 1) : span / 2);
-      return `<path class="${w.on ? "on" : ""}" d="M${w.x1} ${w.y1}H${mx}V${w.y2}H${w.x2}"/>`; });
+      return `<path class="${w.on ? "on" : ""}" style="stroke:${w.c}" d="M${w.x1} ${w.y1}H${mx}V${w.y2}H${w.x2}"/><circle cx="${w.x2 - 4}" cy="${w.y2}" r="4" style="fill:${w.c}"/>`; });
   }).join("");
 }
 function champHtml(boxes) {
