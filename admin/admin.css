@@ -102,3 +102,4 @@ dialog::backdrop{background:#16191Bb0}
 .lbx>i{z-index:3;position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#fff 50%)}
 /* Documents list */
 .doclist{display:grid;gap:8px;margin-top:12px}.docrow{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.top .fsb{display:inline-grid;place-items:center;padding:4px 8px}

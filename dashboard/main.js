@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { STAGE_EN } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -108,3 +108,13 @@ raf(() => {
   }
 });
 render();
+
+// Corner fullscreen button: appears on mouse move or touch, hides again after 3 seconds
+const fsx = $("fsx");
+if (fsx && fsSupported()) {
+  fsx.innerHTML = FS_ICON; let hideT = 0;
+  const show = () => { fsx.classList.add("on"); document.body.classList.add("cur"); clearTimeout(hideT); hideT = setTimeout(() => { fsx.classList.remove("on"); document.body.classList.remove("cur"); }, 3000); };
+  ["mousemove", "touchstart"].forEach((ev) => addEventListener(ev, show, { passive: true }));
+  fsx.onclick = async () => { try { await toggleFs(); } catch (e) {} if (!sound) { sound = true; beep(660, 80); $("fs")?.remove(); } show(); };
+  document.addEventListener("fullscreenchange", () => { fsx.title = isFs() ? "Exit full screen" : "Full screen"; });
+} else if (fsx) fsx.remove();

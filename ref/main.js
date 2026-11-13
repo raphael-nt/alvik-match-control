@@ -1,9 +1,9 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
-import { useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
+import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 // Fullscreen button shows only where the browser supports it (not on iPhone Safari)
-const fsOk = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+const fsOk = fsSupported();
 
 useMarks();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -339,9 +339,4 @@ document.addEventListener("click", async (e) => {
     if (k) clockAct(k);
   }
 });
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("[data-fs]")) return;
-  const d = document, el = d.documentElement;
-  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
-  else (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
-});
+document.addEventListener("click", (e) => { if (e.target.closest("[data-fs]")) toggleFs()?.catch?.(() => {}); });
