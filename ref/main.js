@@ -1,5 +1,7 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
 import { useMarks, connect, onChange, paintNet, rpc, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
+import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { listDocs, openDoc, docRows } from "../shared/docs.js";
 
 useMarks();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
@@ -73,7 +75,7 @@ async function claim() {
 async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => (wake = null)); } } catch (e) {} }
 
 // ---------- Components ----------
-const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
+const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
 const teams = (m) => `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, "red"))}</b><em>${m.red_wins}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, "blue"))}</b><em>${m.blue_wins}</em></div></div>`;
 const clockBox = () => `<div class="clock" id="clock"><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></div>`;
 const sideBtns = (key, both) => `<div class="pair"><button class="btn red big" data-mk="${key}" data-s="red">RED</button><button class="btn blue big" data-mk="${key}" data-s="blue">BLUE</button></div>${both ? `<button class="btn same" data-mk="${key}" data-s="both">Same time</button>` : ""}`;
@@ -247,7 +249,7 @@ let key = "";
 function render(force) {
   const f = field(1), m = f && f.match_code ? match(f.match_code) : null, g = m ? openGame(m.code) : null;
   const ph = f ? clockV3(f).phase : "";
-  const k = JSON.stringify([S.ready, event().rules_mode, !!pin, ctl, f && [f.match_code, f.phase, f.session, f.checks, f.stop_ms], m && [m.status, m.red_wins, m.blue_wins, m.absent_req, m.red_seed, m.blue_seed], g && [g.id, g.version, g.status, g.need, g.pattern], g && marksOf(g.id).map((x) => x.id + x.voided), Q.length, reviewOk, finished, ph]);
+  const k = JSON.stringify([S.ready, event().rules_mode, event().docs_ref, !!pin, ctl, f && [f.match_code, f.phase, f.session, f.checks, f.stop_ms], m && [m.status, m.red_wins, m.blue_wins, m.absent_req, m.red_seed, m.blue_seed], g && [g.id, g.version, g.status, g.need, g.pattern], g && marksOf(g.id).map((x) => x.id + x.voided), Q.length, reviewOk, finished, ph]);
   if (!force && k === key) { paintNet(); return; }
   key = k;
   if (!S.ready) app.innerHTML = `<div class="login"><p class="muted">Loading</p>${netBadge()}</div>`;
@@ -265,3 +267,29 @@ raf(tickClock);
 setInterval(() => { if (pin && S.ready) rpc("a2_ref_heartbeat", { p_pin: pin, p_device: device }).then((ok) => { if (!ok || (ctl && !ctl.control)) claim(); }).catch(() => {}); }, 10000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && pin) keepAwake(); });
 render();
+
+// ---------- Bracket and documents sheet (opened from the top bar icons) ----------
+let sheet = "";
+// On a phone the full bracket would shrink below readable size, so keep at least 75% scale and let the sheet scroll sideways
+function sizeSheetBracket(el) {
+  const w = el.querySelector(".bkw"), bk = w && w.querySelector("[data-bk]"); if (!bk) return;
+  w.style.width = Math.max(w.parentElement.clientWidth - 24, +bk.dataset.w * 0.75) + "px"; fitBrackets(el);
+}
+function paintSheet() {
+  let el = $("sheet");
+  if (!sheet) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "sheet"; document.body.append(el); }
+  const head = (t) => `<div class="sh-h"><b>${t}</b><button class="btn small" data-sheet="">Close</button></div>`;
+  if (sheet === "bracket") { el.innerHTML = `${head("Bracket")}<div class="sh-b"><div class="bkw">${bracketHtml({})}</div></div>`; sizeSheetBracket(el); }
+  else {
+    el.innerHTML = `${head("Rules and FAQ")}<div class="sh-b" id="shdocs"><p class="muted">Loading</p></div>`;
+    listDocs({ p_pin: pin }).then((d) => { const b = $("shdocs"); if (b) b.innerHTML = docRows(d, false); }).catch((e) => { const b = $("shdocs"); if (b) b.innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+  }
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-sheet]"); if (b) { sheet = b.dataset.sheet; paintSheet(); return; }
+  const d = e.target.closest("[data-doc]"); if (d) openDoc(+d.dataset.doc, { p_pin: pin }).catch((x) => toast(x.message, true));
+});
+// Keep the bracket current while it is open, and close the documents sheet if the admin turns it off
+onChange(() => { if (sheet === "bracket") paintSheet(); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
+addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") sizeSheetBracket(el); });

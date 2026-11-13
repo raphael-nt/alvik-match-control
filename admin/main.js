@@ -1,5 +1,6 @@
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
+import { listDocs, openDoc, fileToB64, docRows } from "../shared/docs.js";
 import { build as buildFormat, validate as validateFormat, defaults as fmtDefaults, STAGE_EN } from "../shared/format.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
@@ -318,11 +319,21 @@ function settingsView() {
      <button class="btn primary" data-act="saveev">Save</button></div></div>
     <div class="card"><div class="h2"><h2>Password and PIN</h2></div><div class="form"><div class="two"><label>รหัสผ่านแอดมินใหม่<input id="np" type="password" autocomplete="new-password" minlength="6"></label><label>PIN กรรมการใหม่<input id="ni" inputmode="numeric" pattern="[0-9]{4,8}"></label></div>
      <button class="btn" data-act="savepw">เปลี่ยน (กรอกเฉพาะช่องที่ต้องการเปลี่ยน)</button></div></div>
+    <div class="card"><div class="h2"><h2>Documents</h2><span>กติกา FAQ และไฟล์อื่น</span></div>
+     <label class="switch"><input type="checkbox" id="dref" ${ev.docs_ref !== false ? "checked" : ""}><span></span><b>Referees can open documents</b></label>
+     <div id="doclist" class="doclist"><p class="muted">Loading</p></div>
+     <div class="form" style="margin-top:12px"><div class="two"><label>ชื่อเอกสาร<input id="dt" maxlength="80" placeholder="เช่น กติกา, FAQ"></label><label>ไฟล์ (PDF หรือรูป ไม่เกิน 10 MB)<input id="df" type="file" accept=".pdf,image/*"></label></div>
+     <button class="btn primary" data-act="docadd">Upload</button></div></div>
     <div class="card"><div class="h2"><h2>Data</h2></div><div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
      <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ</span></div></div></div>
    <div class="card links"><div class="h2"><h2>Links</h2></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "Referee", "เครื่องกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "Admin", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
 }
+async function loadDocs() {
+  const el = $("doclist"); if (!el) return;
+  try { el.innerHTML = docRows(await listDocs({ p_pw: pw }), true); } catch (e) { el.innerHTML = `<p class="warn">${esc(e.message)}</p>`; }
+}
 function afterForm() {
+  if (formTab === "settings") loadDocs();
   document.querySelectorAll("[data-qr]").forEach((d) => { try { const q = window.qrcode(0, "M"); q.addData(d.dataset.qr); q.make(); d.innerHTML = q.createSvgTag({ scalable: true, margin: 2 }); d.firstChild.style.cssText = "width:110px;height:110px"; } catch (e) {} });
 }
 
@@ -423,6 +434,14 @@ const H = {
   async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "Layout saved"); },
   layreset() { lay = liveLayout(null); paintLay(); },
   layundo() { lay = liveLayout(event().dash_layout?.live); paintLay(); },
+  async docadd() {
+    const f = $("df").files[0], title = $("dt").value.trim() || (f && f.name.replace(/\.[^.]+$/, ""));
+    if (!f) return toast("เลือกไฟล์ก่อน", true);
+    if (f.size > 10 * 1024 * 1024) return toast("ไฟล์ใหญ่เกิน 10 MB", true);
+    const b = $("df"); b.disabled = true;
+    const ok = await act(async () => adm("a2_adm_doc_add", { p_title: title, p_file_name: f.name, p_mime: f.type || "application/octet-stream", p_data: await fileToB64(f) }), "Uploaded");
+    b.disabled = false; if (ok !== undefined) { $("dt").value = ""; b.value = ""; loadDocs(); }
+  },
   async savename() { const name = $("en").value.trim(); if (!name) return toast("ใส่ชื่องานก่อน", true); await act(() => adm("a2_adm_event", { p: { name } }), "Name saved"); },
   async saveev() {
     const p = { setup_ms: Math.max(0, +$("es").value) * 1000, game_ms: Math.max(10, +$("eg").value) * 1000, countdown_ms: Math.max(0, Math.min(10, +$("ec").value)) * 1000 };
@@ -446,8 +465,17 @@ const H = {
 };
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-act]"); if (!b || b.disabled) return; const f = H[b.dataset.act]; if (f) f(b); });
 document.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+document.addEventListener("click", async (e) => {
+  const o = e.target.closest("[data-doc]"), d = e.target.closest("[data-docdel]");
+  if (o) openDoc(+o.dataset.doc, { p_pw: pw }).catch((x) => toast(x.message, true));
+  if (d && confirm(`ลบเอกสาร ${d.dataset.t}`)) { if ((await act(() => adm("a2_adm_doc_del", { p_id: +d.dataset.docdel }), "Deleted")) !== undefined) loadDocs(); }
+});
 document.addEventListener("change", async (e) => {
   if (e.target.id === "lgf") { logF = e.target.value; redraw(); }
+  if (e.target.id === "dref") {
+    const on = e.target.checked;
+    if ((await act(() => adm("a2_adm_event", { p: { docs_ref: on } }), on ? "Referees can open documents" : "Documents hidden from referees")) === undefined) e.target.checked = !on;
+  }
   if (e.target.id === "rm") {
     const on = e.target.checked, f = field(1), busy = f && f.match_code && ["setup", "ready", "countdown", "game", "stopped", "over"].includes(f.phase);
     if (busy && !confirm("มีเกมกำลังดำเนินอยู่ เปลี่ยนโหมดตอนนี้ กรรมการจะเห็นหน้าใหม่ทันที")) { e.target.checked = !on; return; }
