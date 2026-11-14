@@ -1,6 +1,6 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
 import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc } from "./common.js";
-import { STAGE_EN, KO_ORDER } from "./format.js";
+import { stageLabel, KO_ORDER } from "./format.js";
 
 // Box sizes. bracketHtml({ compact: true }) swaps in shorter rows with no match chips and no champion box,
 // for short panels such as the Live screen strip
@@ -11,9 +11,21 @@ const useDims = (d) => ({ COLW, GAP, HH, RH, CH, VGAP, TOP, MINH } = d);
 useDims(FULL);
 
 function columns() {
-  const cols = [], gs = groups();
-  ["r1", "r2"].forEach((st) => { const l = gs.filter((g) => g.stage === st); if (l.length) cols.push(l.map((g) => ({ kind: "g", g, n: (g.srcs || []).length }))); });
-  KO_ORDER.forEach((st) => { const l = matches().filter((m) => m.stage === st || (st === "final" && m.stage === "third")).sort((a, b) => (a.stage === "third") - (b.stage === "third")); if (l.length) cols.push(l.map((m) => ({ kind: "m", m, n: 2 }))); });
+  const cols = [], gs = groups(), ms = matches().filter((m) => !m.grp);
+  const stageNum = (s) => (/^r(\d+)$/.test(s) ? +RegExp.$1 : 999);
+  const koAll = [...KO_ORDER, "third"];
+  const preStages = [...new Set([...gs.map((g) => g.stage || "r1"), ...ms.filter((m) => !koAll.includes(m.stage)).map((m) => m.stage)])]
+    .sort((a, b) => stageNum(a) - stageNum(b) || a.localeCompare(b));
+  preStages.forEach((st) => {
+    const gItems = gs.filter((g) => (g.stage || "r1") === st).map((g) => ({ kind: "g", g, n: (g.srcs || []).length }));
+    const mItems = ms.filter((m) => m.stage === st).map((m) => ({ kind: "m", m, n: 2 }));
+    const col = [...gItems, ...mItems];
+    if (col.length) cols.push(col);
+  });
+  KO_ORDER.forEach((st) => {
+    const l = ms.filter((m) => m.stage === st || (st === "final" && m.stage === "third")).sort((a, b) => (a.stage === "third") - (b.stage === "third"));
+    if (l.length) cols.push(l.map((m) => ({ kind: "m", m, n: 2 })));
+  });
   return cols;
 }
 function layout() {
@@ -40,9 +52,10 @@ function chipHtml(m, clickable) {
 function boxHtml(b, clickable) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
   const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : "Group " + b.g.grp;
-  const sub = isM ? `${STAGE_EN[b.m.stage] && b.m.stage !== "final" && b.m.stage !== "third" ? STAGE_EN[b.m.stage] + " · " : ""}Bo${b.m.bo}` : STAGE_EN[b.g.stage] || "";
+  const stLbl = isM ? stageLabel(b.m.stage) : stageLabel(b.g.stage);
+  const sub = isM ? `${stLbl && b.m.stage !== "final" && b.m.stage !== "third" ? stLbl + ", " : ""}Bo${b.m.bo}` : stLbl;
   const rh = rowsOf(b).map((r) => {
-    const up = isM ? r.win : r.sure && r.pos <= adv, out = isM ? r.lose : r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);
+    const up = isM ? r.win : adv > 0 && r.sure && r.pos <= adv, out = isM ? r.lose : adv > 0 && r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);
     return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>absent</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
   }).join("");
   const ms = isM ? [b.m] : matches().filter((m) => m.grp === b.g.grp);
@@ -61,9 +74,16 @@ function wires(boxes) {
     if (src.l && boxes["m:" + src.l]) { const sb = boxes["m:" + src.l], m = match(src.l); return { x: sb.x + sb.w, y: sb.y + sb.h - CH / 2, on: !!(m && m.winner_seed != null) }; }
     return null;
   };
-  Object.values(boxes).forEach((b, bi) => {
+  Object.values(boxes).forEach((b) => {
     if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) elbow(f.x, f.y, b.x, rowY(b, j), f.on, src.g || src.w || "L" + src.l); });
-    else if (b.g.stage === "r2") { const rows = tableOf(b.g.grp); (b.g.srcs || []).forEach((src, j) => { const f = from(src); const di = rows.findIndex((r) => r.slot === j); if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on, src.g || src.w); }); }
+    else {
+      const rows = tableOf(b.g.grp);
+      (b.g.srcs || []).forEach((src, j) => {
+        if (!src || (!src.g && !src.w && !src.l)) return;
+        const f = from(src), di = rows.findIndex((r) => r.slot === j);
+        if (f) elbow(f.x, f.y, b.x, rowY(b, di < 0 ? j : di), f.on, src.g || src.w || "L" + src.l);
+      });
+    }
   });
   // Every wire in a column gap gets its own vertical lane so lines never run on top of each other
   const gaps = {};
@@ -76,7 +96,7 @@ function wires(boxes) {
   }).join("");
 }
 function champHtml(boxes) {
-  const fb = boxes["m:F"]; if (!fb) return "";
+  const fb = boxes["m:F"] || Object.values(boxes).find((b) => b.kind === "m" && b.m.stage === "final"); if (!fb) return "";
   const w = fb.m.winner_seed;
   return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(teamName(w)) : "TBD"}</b></div>`;
 }

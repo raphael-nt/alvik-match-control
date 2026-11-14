@@ -1,7 +1,7 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
 import { fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
-import { STAGE_EN } from "../shared/format.js";
+import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
 
 useMarks();
@@ -12,16 +12,18 @@ let sound = false;
 $("fs").onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; beep(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
 const snd = (f, ms) => sound && beep(f, ms);
 
-const ROUND = STAGE_EN;
 const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}</div>`;
 const upNext = (n = 3) => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no).slice(0, n);
 const upNextHtml = () => `<div class="upn"><h3>Up next</h3>${upNext().map((m) => `<div><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span>${m.sched_at ? fmtTime(m.sched_at) : ""}</span></div>`).join("") || "<div>-</div>"}</div>`;
 
+const finalMatch = () => match("F") || matches().find((m) => m.stage === "final");
+const allMatchesDone = () => { const ms = matches(); return ms.length > 0 && ms.every((m) => m.status === "done"); };
 function onField() { const f = field(1); const m = f && f.match_code ? match(f.match_code) : null; return m && m.status !== "done" ? { f, m } : null; }
 function mode() {
   const ev = event(), md = ev.tv_mode;
   if (md && md !== "auto") return { fields: "live", groups: "standings" }[md] || md;
-  const F = match("F"); if (F && F.status === "done") return "champion";
+  const F = finalMatch();
+  if ((F && F.status === "done") || (!F && allMatchesDone() && S.ranking.some((r) => r.pos === 1))) return "champion";
   return onField() ? "live" : "bracket";
 }
 
@@ -33,7 +35,7 @@ function liveView() {
   // Team panels show the team name only
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
   const body = {
-    info: `<div class="lh"><span>${ROUND[m.stage]}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
+    info: `<div class="lh"><span>${stageLabel(m.stage)}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
     bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16 })}</div>`,
@@ -49,10 +51,12 @@ function tableRows(G, adv) {
 }
 // Fit every group on one screen: pick columns and rows, then size text to the tallest group
 function standingsView() {
-  const gs = groups(), n = gs.length || 1, maxT = Math.max(2, ...gs.map((g) => (g.srcs || []).length));
+  const gs = groups();
+  if (!gs.length) return `${head("Standings")}<div class="groups"><div class="gp"><h2>No groups</h2></div></div>`;
+  const n = gs.length, maxT = Math.max(2, ...gs.map((g) => (g.srcs || []).length));
   const cols = n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols);
   const cellH = (940 - (rows - 1) * 18) / rows, fs = Math.max(16, Math.min(34, Math.floor((cellH - 90) / (maxT + 1) / 1.45)));
-  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${ROUND[g.stage] || ""}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
+  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${stageLabel(g.stage)}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
 }
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
@@ -60,22 +64,35 @@ function scheduleView() {
 }
 function drawView() {
   const ds = event().draw_state || {}, t = now() - (ds.start || 0);
-  const col = (G, seeds) => `<div class="dc"><h2>Group ${G}</h2>${seeds.map((sd) => `<div class="slot"><small>${sd}</small>${t >= (sd - 1) * 1600 ? `<span class="nm">${esc(teamName(sd))}</span>` : `<span class="muted">...</span>`}</div>`).join("")}</div>`;
-  const r1 = groups().filter((g) => g.stage === "r1");
-  return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${Math.min(4, r1.length)},1fr)">${r1.map((g) => col(g.grp, g.srcs.map((x) => x.seed))).join("")}</div>`;
+  const col = (title, seeds) => `<div class="dc"><h2>${title}</h2>${seeds.map((sd) => `<div class="slot"><small>${sd}</small>${t >= (sd - 1) * 1600 ? `<span class="nm">${esc(teamName(sd))}</span>` : `<span class="muted">...</span>`}</div>`).join("")}</div>`;
+  const r1 = groups().filter((g) => g.srcs?.some((x) => x && x.seed != null));
+  if (r1.length) {
+    return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${Math.min(4, r1.length)},1fr)">${r1.map((g) => col("Group " + g.grp, g.srcs.filter((x) => x && x.seed != null).map((x) => x.seed))).join("")}</div>`;
+  }
+  const seeds = teamsArr().map((x) => x.seed), c = Math.min(4, Math.max(1, Math.ceil(seeds.length / 8))), per = Math.ceil(seeds.length / c);
+  const cols = [...Array(c).keys()].map((i) => seeds.slice(i * per, (i + 1) * per)).filter((a) => a.length);
+  return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${cols.length || 1},1fr)">${cols.map((arr, i) => col(cols.length > 1 ? `Seeds ${arr[0]} to ${arr[arr.length - 1]}` : "Seeds", arr)).join("")}</div>`;
 }
 function champView() {
-  const F = match("F"); if (!F || F.winner_seed == null) return bracketView();
-  const W = F.winner_seed, R = W === F.red_seed ? F.blue_seed : F.red_seed;
-  return `${head("Results")}<div class="champ"><div class="cbig"><div class="k">Champion</div><div class="v">${esc(teamName(W))}</div><div class="s">Runner-up ${esc(teamName(R))}</div></div>
-    <div class="rk">${S.ranking.filter((r) => r.pos >= 3 && r.seed != null).map((r) => `<div><b>${r.label}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div></div>`;
+  const F = finalMatch();
+  if (F && F.winner_seed != null) {
+    const W = F.winner_seed, R = W === F.red_seed ? F.blue_seed : F.red_seed;
+    return `${head("Results")}<div class="champ"><div class="cbig"><div class="k">Champion</div><div class="v">${esc(teamName(W))}</div><div class="s">Runner-up ${esc(teamName(R))}</div></div>
+      <div class="rk">${S.ranking.filter((r) => r.pos >= 3 && r.seed != null).map((r) => `<div><b>${r.label}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div></div>`;
+  }
+  const top1 = S.ranking.filter((r) => r.pos === 1 && r.seed != null), top2 = S.ranking.filter((r) => r.pos === 2 && r.seed != null);
+  if (!allMatchesDone() || !top1.length) return bracketView();
+  const minRest = top1.length === 1 && top2.length ? 3 : 2;
+  const sub = top1.length === 1 && top2.length ? `Runner-up ${top2.map((r) => esc(teamName(r.seed))).join(", ")}` : "";
+  return `${head("Results")}<div class="champ"><div class="cbig"><div class="k">${top1.length > 1 ? "Champions" : "Champion"}</div><div class="v">${top1.map((r) => esc(teamName(r.seed))).join(", ")}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>
+    <div class="rk">${S.ranking.filter((r) => r.pos >= minRest && r.seed != null).map((r) => `<div><b>${r.label}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div></div>`;
 }
 
 let key = "", cur = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
-  const k = md + JSON.stringify([event().name, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
+  const k = md + JSON.stringify([event().name, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
   stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "champion" ? champView() : bracketView();
