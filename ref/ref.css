@@ -75,3 +75,7 @@ html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .ask-card h3{margin:0;font-size:22px}.ask-card p{margin:0;color:#5D6663}
 .ask-btns{display:grid;gap:10px}
 .clock.paused .t{color:var(--tape)}
+/* Stand pattern pictures from the rules */
+.pat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.patb{display:grid;gap:4px;padding:6px;min-height:0;justify-items:center}.patb img{width:100%;max-width:160px;height:auto;border-radius:6px;background:#fff}.patb.on{outline:4px solid var(--teal);outline-offset:1px}
+.patbig{display:block;width:100%;max-width:320px;margin:10px auto 0;border-radius:8px;background:#fff}
+.patb span{font-size:16px}.pat+.btn{width:100%;margin-top:8px}.pat .patb.on{background:var(--ink);color:#fff}
