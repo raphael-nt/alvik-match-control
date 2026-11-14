@@ -353,8 +353,83 @@ function customFormatHtml(f) {
 
 // ---------- Quick setup : the few settings most events need. Details stay in a collapsed section ----------
 let fmtDetOpen = false;
+// ---------- Pool format : one pool with random pairings, top teams drawn into groups, then cross semifinals ----------
+const POOL_DEF = { mode: "pool", games: 4, adv: 6, groups2: 2, adv2: 2, bo_pool: 3, bo_group: 3, bo_ko: 3, bo_final: 5, third: false };
+// Random pairings where every team plays exactly k different opponents. n * k must be even
+function poolPairs(n, k) {
+  for (let tries = 0; tries < 3000; tries++) {
+    const stubs = []; for (let i = 0; i < n; i++) for (let j = 0; j < k; j++) stubs.push(i);
+    for (let i = stubs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [stubs[i], stubs[j]] = [stubs[j], stubs[i]]; }
+    const seen = new Set(), pairs = []; let ok = true;
+    for (let i = 0; i < stubs.length; i += 2) {
+      const a = Math.min(stubs[i], stubs[i + 1]), b = Math.max(stubs[i], stubs[i + 1]);
+      if (a === b || seen.has(a + ":" + b)) { ok = false; break; }
+      seen.add(a + ":" + b); pairs.push([a, b]);
+    }
+    if (!ok) continue;
+    // Order into rounds so a team does not play twice in a row where possible, and alternate red and blue
+    const order = [], left = pairs.slice(), plays = Array(n).fill(0), last = new Set();
+    while (left.length) {
+      left.sort((x, y) => (last.has(x[0]) + last.has(x[1])) - (last.has(y[0]) + last.has(y[1])) || (plays[x[0]] + plays[x[1]]) - (plays[y[0]] + plays[y[1]]));
+      const [a, b] = left.shift(); plays[a]++; plays[b]++; last.clear(); last.add(a); last.add(b);
+      order.push(order.length % 2 ? [b, a] : [a, b]);
+    }
+    return order;
+  }
+  return null;
+}
+function poolCheck(q) {
+  const n = +q.teams, k = +q.games, A = +q.adv, G = +q.groups2, a2 = +q.adv2;
+  if (n < 3) return "ต้องมีอย่างน้อย 3 ทีม";
+  if (k < 1 || k > n - 1) return `เล่นได้ 1 ถึง ${n - 1} ครั้ง`;
+  if ((n * k) % 2) return `${n} ทีมเล่นเท่ากันได้เฉพาะจำนวนครั้งที่เป็นเลขคู่ เช่น ${[2, 4, 6].filter((x) => x <= n - 1).join(", ")}`;
+  if (A < 2 || A > n) return "ทีมที่เข้ารอบสองต้องเป็น 2 ถึงจำนวนทีม";
+  if (G < 1 || A < G * 2) return "แต่ละกลุ่มรอบสองต้องมีอย่างน้อย 2 ทีม";
+  if (![1, 2, 4].includes(G * a2)) return "ทีมที่ไปรอบรองรวมต้องเป็น 2 หรือ 4 ทีม";
+  return "";
+}
+function poolFormat(q) {
+  const n = Math.trunc(+q.teams), err = poolCheck(q);
+  const f = { teams: n, rounds: [], customGroups: [], customMatches: [], quick: { ...q, err } };
+  if (err) return f;
+  const pairs = poolPairs(n, +q.games); if (!pairs) { f.quick.err = "สุ่มคู่ไม่สำเร็จ ลองกดสุ่มใหม่"; return f; }
+  f.customGroups.push({ grp: "A", stage: "r1", adv: +q.adv, srcs: [...Array(n).keys()].map((i) => "s" + (i + 1)) });
+  pairs.forEach(([a, b], i) => f.customMatches.push({ code: "A" + (i + 1), stage: "r1", grp: "A", bo: +q.bo_pool, red: "s" + (a + 1), blue: "s" + (b + 1) }));
+  // Draw the qualifying places into the second round groups at random, sizes as even as possible
+  const places = [...Array(+q.adv).keys()].map((i) => "A" + (i + 1));
+  for (let i = places.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [places[i], places[j]] = [places[j], places[i]]; }
+  const G = +q.groups2, letters = [...Array(G).keys()].map((i) => String.fromCharCode(66 + i));
+  letters.forEach((L, gi) => {
+    const srcs = places.filter((_, i) => i % G === gi);
+    f.customGroups.push({ grp: L, stage: "r2", adv: +q.adv2, srcs });
+    buildGroupMatches(L, "r2", srcs.map(parseSrcKey), +q.bo_group).forEach((m) => f.customMatches.push({ code: m.code, stage: "r2", grp: L, bo: +q.bo_group, red: srcKey(m.red_src), blue: srcKey(m.blue_src) }));
+  });
+  // Knockout from the second round : 4 teams cross (1st of one group meets 2nd of the other), 2 teams go straight to the final
+  const Q = []; for (let p = 1; p <= +q.adv2; p++) letters.forEach((L) => Q.push(L + p));
+  if (Q.length === 4) {
+    // Q is [1st of each group..., 2nd of each group...] : the best place meets the weakest, so two groups cross
+    f.customMatches.push({ code: "SF1", stage: "sf", grp: null, bo: +q.bo_ko, red: Q[0], blue: Q[3] });
+    f.customMatches.push({ code: "SF2", stage: "sf", grp: null, bo: +q.bo_ko, red: Q[1], blue: Q[2] });
+    if (q.third) f.customMatches.push({ code: "3P", stage: "third", grp: null, bo: +q.bo_ko, red: "l:SF1", blue: "l:SF2" });
+    f.customMatches.push({ code: "F", stage: "final", grp: null, bo: +q.bo_final, red: "w:SF1", blue: "w:SF2" });
+  } else if (Q.length === 2) f.customMatches.push({ code: "F", stage: "final", grp: null, bo: +q.bo_final, red: Q[0], blue: Q[1] });
+  return f;
+}
+function poolFieldsHtml(q, bo) {
+  return `<label>เล่นคนละกี่ครั้ง<input type="number" min="1" max="63" value="${q.games}" data-q="games"></label>
+    <label>เข้ารอบสอง<input type="number" min="2" max="64" value="${q.adv}" data-q="adv"></label>
+    <label>กลุ่มรอบสอง<input type="number" min="1" max="8" value="${q.groups2}" data-q="groups2"></label>
+    <label>เข้ารองชนะเลิศกลุ่มละ<input type="number" min="1" max="4" value="${q.adv2}" data-q="adv2"></label>
+    <label>Bo รอบแรก${bo("bo_pool")}</label><label>Bo รอบสอง${bo("bo_group")}</label>
+    <label>Bo รองชนะเลิศ${bo("bo_ko")}</label><label>Bo รอบชิง${bo("bo_final")}</label>
+    <label class="chk2"><input type="checkbox" data-q="third" ${q.third ? "checked" : ""}>มีชิงที่ 3</label>
+    <div style="align-self:end"><button class="btn small" data-act="fpoolshuffle">สุ่มคู่ใหม่</button></div>
+    ${q.err ? `<div class="warn" style="grid-column:1/-1">${esc(q.err)}</div>` : ""}`;
+}
+
 // Read the quick values back from the current format; "advanced" when the format has more than one group round or custom matches
 function quickOf(f) {
+  if (f.quick && f.quick.mode === "pool" && Array.isArray(f.customMatches)) return { ...POOL_DEF, ...f.quick, teams: f.teams };
   const g = f.rounds.filter((r) => r.type === "groups"), ko = koOf(f), bo = ko ? ko.bo_by_stage || {} : {};
   const mode = Array.isArray(f.customMatches) || g.length > 1 ? "advanced" : g.length && ko ? "gko" : g.length ? "g" : "ko";
   const g0 = g[0];
@@ -363,6 +438,7 @@ function quickOf(f) {
 }
 // Rebuild the format from quick values. Teams are spread as evenly as possible (10 teams in 3 groups : 4, 3, 3)
 function quickApply(q) {
+  if (q.mode === "pool") { fmt = poolFormat({ ...POOL_DEF, ...q }); return; }
   const teams = Math.max(2, Math.min(64, Math.trunc(+q.teams || 2)));
   const rounds = [];
   if (q.mode !== "ko") {
@@ -381,12 +457,13 @@ function quickHtml(f, built) {
   // Who gets a bye in the first knockout round, so the admin sees it before applying
   const st0 = built && built.koStages && built.koStages[0], byes = st0 ? (() => { const out = []; for (let i = 0; i < st0.slots.length; i += 2) { const a = st0.slots[i], b = st0.slots[i + 1]; if (a && !b) out.push(a); if (b && !a) out.push(b); } return out; })() : [];
   return `<div class="fquick">
-    <label>รูปแบบ${sel("mode", [["gko", "แบ่งกลุ่ม แล้วแพ้คัดออก"], ["ko", "แพ้คัดออกล้วน"], ["g", "แบ่งกลุ่มอย่างเดียว"]])}</label>
+    <label>รูปแบบ${sel("mode", [["gko", "แบ่งกลุ่ม แล้วแพ้คัดออก"], ["pool", "รวมสุ่มคู่ แล้วกลุ่ม แล้วรองชนะเลิศ"], ["ko", "แพ้คัดออกล้วน"], ["g", "แบ่งกลุ่มอย่างเดียว"]])}</label>
     <label>จำนวนทีม<input type="number" min="2" max="64" value="${q.teams}" data-q="teams"></label>
-    ${q.mode !== "ko" ? `<label>จำนวนกลุ่ม<input type="number" min="1" max="26" value="${q.groups}" data-q="groups"></label>` : ""}
+    ${q.mode === "pool" ? poolFieldsHtml(q, bo) : ""}
+    ${q.mode !== "ko" && q.mode !== "pool" ? `<label>จำนวนกลุ่ม<input type="number" min="1" max="26" value="${q.groups}" data-q="groups"></label>` : ""}
     ${q.mode === "gko" ? `<label>เข้ารอบกลุ่มละ<input type="number" min="1" max="64" value="${q.adv}" data-q="adv"></label>` : ""}
-    ${q.mode !== "ko" ? `<label>Bo รอบกลุ่ม${bo("bo_group")}</label>` : ""}
-    ${q.mode !== "g" ? `<label>Bo แพ้คัดออก${bo("bo_ko")}</label><label>Bo รอบชิง${bo("bo_final")}</label>
+    ${q.mode !== "ko" && q.mode !== "pool" ? `<label>Bo รอบกลุ่ม${bo("bo_group")}</label>` : ""}
+    ${q.mode !== "g" && q.mode !== "pool" ? `<label>Bo แพ้คัดออก${bo("bo_ko")}</label><label>Bo รอบชิง${bo("bo_final")}</label>
       <label class="chk2"><input type="checkbox" data-q="third" ${q.third ? "checked" : ""}>มีชิงที่ 3</label>` : ""}
   </div>
   ${byes.length ? `<p class="muted" style="margin:6px 0 0">ได้บายข้ามรอบแรก : ${byes.map((k) => esc(slotLabel(k))).join(", ")}</p>` : ""}`;
@@ -615,6 +692,7 @@ const H = {
     if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "Format applied") !== undefined) { fmt = null; await loadAll(); formTab = ""; render(); }
   },
   fmtundo() { fmt = null; redrawFmt(); },
+  fpoolshuffle() { quickApply({ ...quickOf(fmtEdit()), mode: "pool" }); redrawFmt(); },
   fquickreset() { quickApply({ ...quickOf(fmtDefaults()), mode: "gko" }); redrawFmt(); },
   fmtcustom() { fmt = materializeCustom(fmtEdit()); redrawFmt(); },
   fmtauto() { if (!confirm("ทิ้งการแก้ไขแบบ Custom แล้วกลับไปใช้ตัวสร้างรอบอัตโนมัติ")) return; const f = fmtEdit(); f.customMatches = null; f.customGroups = null; redrawFmt(); },
@@ -720,7 +798,7 @@ document.addEventListener("change", async (e) => {
 });
 document.addEventListener("change", (e) => {
   const t = e.target; if (!t.closest || !t.closest(".fmtc")) return;
-  if (t.dataset.q) { const q = quickOf(fmtEdit()); q[t.dataset.q] = t.type === "checkbox" ? t.checked : t.dataset.q === "mode" ? t.value : +t.value; quickApply(q); redrawFmt(); return; }
+  if (t.dataset.q) { const q = quickOf(fmtEdit()); q[t.dataset.q] = t.type === "checkbox" ? t.checked : t.dataset.q === "mode" ? t.value : +t.value; if (t.dataset.q === "mode" && q.mode === "pool") Object.assign(q, POOL_DEF, { mode: "pool", teams: q.teams }); quickApply(q); redrawFmt(); return; }
   const f = fmtEdit();
   if (t.dataset.fk === "teams") { f.teams = +t.value; const ko = koOf(f); if (ko && !Array.isArray(f.customMatches)) { ko.slots = null; ko.links = null; } }
   else if (t.dataset.rgbo !== undefined) { f.rounds[+t.dataset.rgbo].bo = +t.value; }

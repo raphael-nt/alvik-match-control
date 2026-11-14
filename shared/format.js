@@ -127,6 +127,7 @@ export function normalize(f0) {
             blue: typeof m?.blue === "string" ? m.blue : srcKey(m?.blue_src || m?.blue),
           }))
         : null,
+      quick: f0.quick && typeof f0.quick === "object" ? { ...f0.quick } : null,
     };
     reletter(f);
     if (!f.customMatches && f.rounds[0]?.type === "groups") {
