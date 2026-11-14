@@ -124,3 +124,5 @@ html,body{background:#14181A;color:var(--ink);overflow:hidden;height:100%;cursor
 #fsx{position:fixed;right:14px;top:14px;z-index:9;width:44px;height:44px;border-radius:10px;border:0;background:#000a;color:#fff;display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
 #fsx.on{opacity:1;pointer-events:auto}
 body.cur,body.cur *{cursor:default}
+/* Announcement bar from Admin > Queue > tools */
+.notice{position:absolute;left:40px;right:40px;top:104px;z-index:6;background:var(--tape);color:#16191B;border-radius:12px;padding:14px 24px;font-size:40px;font-weight:700;text-align:center;box-shadow:0 6px 24px #0008}
