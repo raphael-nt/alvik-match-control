@@ -223,7 +223,8 @@ function scheduleView() {
    <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Round</th><th>Teams</th><th>Time</th><th>Auto call</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
      <td>${m.status === "done" ? `<span class="muted">${hm(m.sched_at)} จบแล้ว</span>` : `<input type="time" data-k="at" value="${hm(m.sched_at)}">`}</td>
      <td>${m.status === "done" ? "" : `<input type="checkbox" data-k="auto" ${m.auto_open ? "checked" : ""} aria-label="เปิดอัตโนมัติ ${m.code}">`}</td><td>${m.sched_at && m.status !== "done" ? `<button class="btn small" data-act="clearsc">ล้าง</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
-   <div class="btns"><button class="btn primary" data-act="savesc">Save schedule</button><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
+   <div class="btns"><button class="btn primary" data-act="savesc">Save schedule</button><select id="pdfstage" class="sm"><option value="">ทุกรอบ</option>${stages.map((st) => `<option value="${esc(st)}">${esc(stageLabel(st))}</option>`).join("")}</select>
+     <label class="chk2"><input type="checkbox" id="pdfnp">ขึ้นหน้าใหม่ทุกรอบ</label><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
 
    <div class="h2" style="margin-top:26px"><h2>วันซ้อม</h2><span>จับคู่ซ้อมแข่งจริง กรรมการใช้หน้าเดิม ผลไม่นับเข้าตารางคะแนนหรือสายแข่ง</span></div>
    <div class="card tools sched"><div class="tl">
@@ -253,23 +254,31 @@ function autofill() {
   });
   toast("จัดเวลาแล้ว ตรวจแล้วกด Save schedule");
 }
-// Printable schedule in a new window; the browser print dialog saves it as PDF
-function printSchedule(title, list, day) {
+// Printable schedule in a new window; the browser print dialog saves it as PDF.
+// One section per round (each can start on a new page), red and blue teams in their own columns
+function printSchedule(title, list, day, newPage) {
   const w = window.open("", "_blank"); if (!w) return toast("เบราว์เซอร์บล็อกหน้าต่างใหม่", true);
   const at = (hm) => new Date(day + "T" + hm + ":00").getTime();
-  const rows = [], brs = sc.breaks.filter((x) => x.at && +x.min > 0).map((x) => ({ s: at(x.at), x })).sort((a, b) => a.s - b.s);
-  let bi = 0;
-  list.forEach((m) => {
-    const t = m.sched_at ? Date.parse(m.sched_at) : null;
-    while (t != null && bi < brs.length && brs[bi].s <= t) { rows.push(`<tr class="br"><td>${esc(brs[bi].x.at)}</td><td colspan="4">${esc(brs[bi].x.label || "พัก")} ${brs[bi].x.min} นาที</td></tr>`); bi++; }
-    rows.push(`<tr><td>${t != null ? hhmm(t) : "-"}</td><td><b>${esc(m.code)}</b></td><td>${esc(stageLabel(m.stage))}</td><td>${esc(sideName(m, "red"))} <span class="vs">พบ</span> ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td></tr>`);
-  });
+  const brs = sc.breaks.filter((x) => x.at && +x.min > 0).map((x) => ({ s: at(x.at), x })).sort((a, b) => a.s - b.s);
+  const used = new Set(), stages = [...new Set(list.map((m) => m.stage))];
+  const rnd = (st) => (st === "practice" ? "Practice" : stageLabel(st));
+  const sections = stages.map((st) => {
+    const rows = [];
+    list.filter((m) => m.stage === st).forEach((m) => {
+      const t = m.sched_at ? Date.parse(m.sched_at) : null;
+      brs.forEach((b, i) => { if (t != null && !used.has(i) && b.s <= t) { used.add(i); rows.push(`<tr class="br"><td>${esc(b.x.at)}</td><td colspan="4">${esc(b.x.label || "พัก")} ${b.x.min} นาที</td></tr>`); } });
+      rows.push(`<tr><td>${t != null ? hhmm(t) : "-"}</td><td><b>${esc(m.code)}</b>${m.grp ? `<div class="g">${esc(grpName(m.grp))}</div>` : ""}</td><td class="r">${esc(sideName(m, "red"))}</td><td class="b">${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td></tr>`);
+    });
+    return `<section${newPage ? ' class="np"' : ""}><h2>${esc(rnd(st))} <span>${list.filter((m) => m.stage === st).length} คู่</span></h2>
+      <table><thead><tr><th style="width:70px">เวลา</th><th style="width:90px">คู่</th><th>ทีมแดง</th><th>ทีมน้ำเงิน</th><th style="width:50px">Bo</th></tr></thead><tbody>${rows.join("")}</tbody></table></section>`;
+  }).join("");
   w.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
-    body{font-family:system-ui,sans-serif;margin:24px;color:#16191B}h1{font-size:20px;margin:0 0 4px}p{margin:0 0 14px;color:#5D6663}
-    table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #C9CFCC;padding:6px 8px;text-align:left}th{background:#F1F3F2}
-    tr.br td{background:#FFF4CC;font-weight:600}.vs{color:#5D6663}@page{size:A4;margin:12mm}</style></head><body>
-    <h1>${esc(event().name || "Alvik")} : ${esc(title)}</h1><p>${esc(day)}</p>
-    <table><thead><tr><th>เวลา</th><th>คู่</th><th>รอบ</th><th>ทีม</th><th>Bo</th></tr></thead><tbody>${rows.join("")}</tbody></table>
+    body{font-family:system-ui,sans-serif;margin:24px;color:#16191B}h1{font-size:20px;margin:0 0 4px}p.d{margin:0 0 10px;color:#5D6663}
+    h2{font-size:16px;margin:18px 0 6px}h2 span{font-weight:400;color:#5D6663;font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}th,td{border:1px solid #C9CFCC;padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#F1F3F2}
+    td.r{border-left:5px solid #CF3A2E}td.b{border-left:5px solid #2457C5}.g{font-size:11px;color:#5D6663}
+    tr.br td{background:#FFF4CC;font-weight:600}section.np+section.np{break-before:page}@page{size:A4;margin:12mm}</style></head><body>
+    <h1>${esc(event().name || "Alvik")} : ${esc(title)}</h1><p class="d">${esc(day)}</p>${sections}
     <script>setTimeout(()=>print(),300)<\/script></body></html>`);
   w.document.close();
 }
@@ -816,7 +825,10 @@ const H = {
   autofill() { autofill(); },
   bradd() { sc.breaks.push({ at: "", min: 15, label: "" }); scSave(); formTab = ""; render(); },
   brdel(b) { sc.breaks.splice(+b.dataset.i, 1); scSave(); formTab = ""; render(); },
-  pdfcomp() { printSchedule("ตารางแข่ง", compMatches().slice().sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no), sc.day || todayStr()); },
+  pdfcomp() {
+    const st = $("pdfstage")?.value || "", list = compMatches().filter((m) => !st || m.stage === st).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
+    printSchedule(st ? "ตารางแข่ง " + stageLabel(st) : "ตารางแข่ง", list, sc.day || todayStr(), !!$("pdfnp")?.checked);
+  },
   pdfprac() { printSchedule("ตารางวันซ้อม", pracMatches().slice().sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no), sc.pday || todayStr()); },
   async pracgen() {
     const n = teamsArr().length, k = +sc.pgames;
