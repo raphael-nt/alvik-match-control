@@ -121,3 +121,4 @@ dialog::backdrop{background:#16191Bb0}
 .fquick .chk2{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:14px}
 .fdet{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}.fdet>summary{cursor:pointer;font-weight:600;color:var(--teal);padding:4px 0}
 .fquick .chk2 input{width:20px;height:20px;min-height:0;flex:none;margin:0}.fquick .chk2{padding-bottom:10px}
+.fprev{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}.fprev>summary{cursor:pointer;font-weight:600;color:var(--teal);padding:4px 0}.fprev .bk{margin-top:8px}

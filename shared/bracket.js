@@ -2,6 +2,25 @@
 import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
 
+// Data source : live store, or preview data from bracketHtml({ data: { groups, matches } }) before a format is applied
+let PV = null;
+function setPreview(data) {
+  if (!data) { PV = null; return; }
+  const ms = data.matches.map((m) => ({ ...m, red_seed: m.red_src && m.red_src.seed != null ? m.red_src.seed : null, blue_seed: m.blue_src && m.blue_src.seed != null ? m.blue_src.seed : null,
+    red_wins: 0, blue_wins: 0, winner_seed: null, status: "locked", field_no: null, walkover: null, forfeit: null }));
+  PV = { groups: data.groups, matches: ms, byCode: new Map(ms.map((m) => [m.code, m])) };
+}
+const _groups = () => (PV ? PV.groups : groups());
+const _matches = () => (PV ? PV.matches : matches());
+const _match = (c) => (PV ? PV.byCode.get(c) : match(c));
+const _table = (g) => {
+  if (!PV) return tableOf(g);
+  const gr = PV.groups.find((x) => x.grp === g); if (!gr) return [];
+  return (gr.srcs || []).map((src, i) => ({ grp: g, slot: i, pos: i + 1, seed: src && src.seed != null ? src.seed : null, mw: 0, ml: 0, gw: 0, gl: 0, sure: false }));
+};
+const _team = (sd) => (PV ? "Team " + sd : teamName(sd));
+const _side = (m, side) => (PV ? (m[side + "_seed"] != null ? "Team " + m[side + "_seed"] : srcLabel(side === "red" ? m.red_src : m.blue_src)) : sideName(m, side));
+
 // Box sizes. bracketHtml({ compact: true }) swaps in shorter rows with no match chips and no champion box,
 // for short panels such as the Live screen strip
 const FULL = { COLW: 300, GAP: 110, HH: 36, RH: 34, CH: 40, VGAP: 24, TOP: 96, MINH: 620 };
@@ -43,7 +62,7 @@ function splitByDeps(colItems) {
 }
 
 function columns() {
-  const cols = [], gs = groups(), ms = matches().filter((m) => !m.grp);
+  const cols = [], gs = _groups(), ms = _matches().filter((m) => !m.grp);
   const stageNum = (s) => (/^r(\d+)$/.test(s) ? +RegExp.$1 : 999);
   const koAll = new Set([...KO_ORDER, "third"]);
   const gBySt = new Map(), mBySt = new Map(), preSet = new Set();
@@ -120,12 +139,12 @@ function layout(mByGrp) {
 const rowY = (b, i) => b.y + HH + i * RH + RH / 2;
 
 function rowsOf(b) {
-  if (b.kind === "m") { const m = b.m; return ["red", "blue"].map((s) => { const sd = m[s + "_seed"]; return { seed: sd, label: sideName(m, s), win: m.winner_seed != null && m.winner_seed === sd, lose: m.winner_seed != null && sd != null && m.winner_seed !== sd }; }); }
-  return tableOf(b.g.grp).map((r) => ({ ...r, label: r.seed != null ? teamName(r.seed) : srcLabel((b.g.srcs || [])[r.slot]) }));
+  if (b.kind === "m") { const m = b.m; return ["red", "blue"].map((s) => { const sd = m[s + "_seed"]; return { seed: sd, label: _side(m, s), win: m.winner_seed != null && m.winner_seed === sd, lose: m.winner_seed != null && sd != null && m.winner_seed !== sd }; }); }
+  return _table(b.g.grp).map((r) => ({ ...r, label: r.seed != null ? _team(r.seed) : srcLabel((b.g.srcs || [])[r.slot]) }));
 }
 function chipHtml(m, clickable) {
   const started = m.red_wins + m.blue_wins > 0 || m.status === "done";
-  const tip = `${m.code} ${sideName(m, "red")} vs ${sideName(m, "blue")}`;
+  const tip = `${m.code} ${_side(m, "red")} vs ${_side(m, "blue")}`;
   return `<button type="button" class="bk-chip ${m.status}"${clickable ? ` data-act="edit" data-c="${m.code}"` : ""} title="${esc(tip)}"><b>${m.code}</b>${started ? `<i>${m.red_wins}-${m.blue_wins}</i>` : ""}${m.walkover ? `<u>FF</u>` : ""}${m.field_no && m.status !== "done" ? `<em>●</em>` : ""}</button>`;
 }
 function boxHtml(b, clickable, mByGrp) {
@@ -213,15 +232,15 @@ function wires(state) {
     skip: dst.ci !== sb.ci + 1,
   });
   const from = (src) => {
-    if (src.g && boxes["g:" + src.g]) { const sb = boxes["g:" + src.g], sr = tableOf(src.g)[src.p - 1]; return { sb, x: sb.x + sb.w, y: rowY(sb, src.p - 1), on: !!(sr && sr.sure) }; }
-    if (src.w && boxes["m:" + src.w]) { const sb = boxes["m:" + src.w], m = match(src.w); return { sb, x: sb.x + sb.w, y: sb.y + HH + RH, on: !!(m && m.winner_seed != null) }; }
-    if (src.l && boxes["m:" + src.l]) { const sb = boxes["m:" + src.l], m = match(src.l); return { sb, x: sb.x + sb.w, y: sb.y + sb.h - sb.ch / 2, on: !!(m && m.winner_seed != null) }; }
+    if (src.g && boxes["g:" + src.g]) { const sb = boxes["g:" + src.g], sr = _table(src.g)[src.p - 1]; return { sb, x: sb.x + sb.w, y: rowY(sb, src.p - 1), on: !!(sr && sr.sure) }; }
+    if (src.w && boxes["m:" + src.w]) { const sb = boxes["m:" + src.w], m = _match(src.w); return { sb, x: sb.x + sb.w, y: sb.y + HH + RH, on: !!(m && m.winner_seed != null) }; }
+    if (src.l && boxes["m:" + src.l]) { const sb = boxes["m:" + src.l], m = _match(src.l); return { sb, x: sb.x + sb.w, y: sb.y + sb.h - sb.ch / 2, on: !!(m && m.winner_seed != null) }; }
     return null;
   };
   Object.values(boxes).forEach((b) => {
     if (b.kind === "m") [b.m.red_src, b.m.blue_src].forEach((src, j) => { const f = src && from(src); if (f) addWire(f.sb, f.x, f.y, b, b.x, rowY(b, j), f.on, src.g || src.w || "L" + src.l); });
     else {
-      const rows = tableOf(b.g.grp);
+      const rows = _table(b.g.grp);
       (b.g.srcs || []).forEach((src, j) => {
         if (!src || (!src.g && !src.w && !src.l)) return;
         const f = from(src), di = rows.findIndex((r) => r.slot === j);
@@ -313,15 +332,16 @@ function wires(state) {
 function champHtml(boxes, finalKey) {
   const fb = (finalKey && boxes[finalKey]) || boxes["m:F"] || Object.values(boxes).find((b) => b.kind === "m" && b.m.stage === "final"); if (!fb) return "";
   const w = fb.m.winner_seed;
-  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(teamName(w)) : "TBD"}</b></div>`;
+  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(_team(w)) : "TBD"}</b></div>`;
 }
 
 // Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens
 export function bracketHtml(opts = {}) {
+  setPreview(opts.data || null);
   IS_COMPACT = !!opts.compact;
   useDims(IS_COMPACT ? COMPACT : FULL);
   const mByGrp = new Map();
-  matches().forEach((m) => {
+  _matches().forEach((m) => {
     if (!m.grp) return;
     let arr = mByGrp.get(m.grp); if (!arr) mByGrp.set(m.grp, (arr = []));
     arr.push(m);
@@ -330,7 +350,7 @@ export function bracketHtml(opts = {}) {
   const wireHtml = wires(st);
   const { boxes, finalKey, W, H } = st;
   const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable, mByGrp)).join("") + (IS_COMPACT ? "" : champHtml(boxes, finalKey));
-  IS_COMPACT = false; useDims(FULL);
+  IS_COMPACT = false; useDims(FULL); setPreview(null);
   return `<div class="bk${opts.dark ? " dark" : ""}${opts.compact ? " compact" : ""}" data-bk data-w="${W}" data-h="${H}"${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wireHtml}</svg>${body}</div></div>`;
 }
 
