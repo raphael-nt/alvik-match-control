@@ -234,11 +234,25 @@ function holdBind(btn, ms, fn) {
 }
 
 // ---------- Clock and sound ----------
-let lastSec = null, lastPh = null;
+let lastSec = null, lastPh = null, _ctEl = null, _rCt = "", _rCl = "", _rPaused = null, _rWarn = null, _rCnt = "";
 function tickClock() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
-  const ct = $("ct"); if (ct) { ct.textContent = fmtMs1(ck.ms); $("cl").textContent = ck.paused ? "Paused · tap for options" : ck.phase === "setup" || ck.phase === "game" ? PHASE_EN[ck.phase] + " · tap to pause" : PHASE_EN[ck.phase]; $("clock").classList.toggle("paused", !!ck.paused); $("clock").classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); }
-  const cn = $("count"); if (cn && ck.count) cn.textContent = ck.count;
+  const ct = $("ct");
+  if (ct) {
+    if (ct !== _ctEl) { _ctEl = ct; _rCt = _rCl = ""; _rPaused = _rWarn = null; }
+    const ctTxt = fmtMs1(ck.ms);
+    const clTxt = ck.paused ? "Paused, tap for options" : ck.phase === "setup" || ck.phase === "game" ? PHASE_EN[ck.phase] + ", tap to pause" : PHASE_EN[ck.phase];
+    const isPaused = !!ck.paused, isWarn = ck.phase === "game" && ck.ms <= 10000;
+    if (ctTxt !== _rCt) { _rCt = ctTxt; ct.textContent = ctTxt; }
+    if (clTxt !== _rCl) { _rCl = clTxt; $("cl").textContent = clTxt; }
+    if (isPaused !== _rPaused) { _rPaused = isPaused; $("clock").classList.toggle("paused", isPaused); }
+    if (isWarn !== _rWarn) { _rWarn = isWarn; $("clock").classList.toggle("warn", isWarn); }
+  }
+  const cn = $("count");
+  if (cn && ck.count) {
+    const cntTxt = String(ck.count);
+    if (cn.textContent !== cntTxt) { _rCnt = cntTxt; cn.textContent = cntTxt; }
+  }
   const sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
   const pPh = lastPh, pSec = lastSec; lastPh = ck.phase; lastSec = sec;
   if (ck.phase === "countdown" && sec !== pSec) beep(880, 120);

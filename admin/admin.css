@@ -115,3 +115,9 @@ dialog::backdrop{background:#16191Bb0}
 .fsub{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
 .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}.slots .pr{display:flex;gap:8px;align-items:center}.slots select{flex:1;min-width:0}
 .ctbl input,.ctbl select{min-width:64px;padding:4px 6px}
+/* Format quick setup and collapsed details */
+.fquick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-items:end}
+.fquick label{display:grid;gap:4px;font-size:13px;color:var(--muted)}.fquick input,.fquick select{width:100%;min-width:0}
+.fquick .chk2{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:14px}
+.fdet{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}.fdet>summary{cursor:pointer;font-weight:600;color:var(--teal);padding:4px 0}
+.fquick .chk2 input{width:20px;height:20px;min-height:0;flex:none;margin:0}.fquick .chk2{padding-bottom:10px}

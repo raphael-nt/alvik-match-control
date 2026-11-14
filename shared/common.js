@@ -14,21 +14,86 @@ export const onChange = (f) => { listeners.add(f); return () => listeners.delete
 let pending = 0;
 const notify = () => { if (pending) return; pending = setTimeout(() => { pending = 0; listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); }, 16); };
 
+const EMPTY = Object.freeze([]);
+let _cTeams = null, _tSize = -1, _cMatches = null, _mSize = -1, _cGroups = null, _gSize = -1;
+let _cFields = null, _fSize = -1, _fCnt = -1, _cGames = null, _gaSize = -1, _cTable = null, _stRef = null;
+function invalidateData(table) {
+  if (!table || table === "a2_team") _cTeams = null;
+  if (!table || table === "a2_match") _cMatches = null;
+  if (!table || table === "a2_group") _cGroups = null;
+  if (!table || table === "a2_field" || table === "a2_event") _cFields = null;
+  if (!table || table === "a2_game") _cGames = null;
+}
+function invalidateStandings() { _cTable = null; }
+
 export const event = () => T.a2_event.get(1) || { name: "", setup_ms: 60000, game_ms: 90000, field_count: 2, tv_mode: "auto" };
-export const teamsArr = () => [...T.a2_team.values()].sort((a, b) => a.seed - b.seed);
-export const matches = () => [...T.a2_match.values()].sort((a, b) => a.order_no - b.order_no);
+export const teamsArr = () => {
+  if (_cTeams && _tSize === T.a2_team.size) return _cTeams;
+  _tSize = T.a2_team.size;
+  return (_cTeams = [...T.a2_team.values()].sort((a, b) => a.seed - b.seed));
+};
+export const matches = () => {
+  if (_cMatches && _mSize === T.a2_match.size) return _cMatches;
+  _mSize = T.a2_match.size;
+  return (_cMatches = [...T.a2_match.values()].sort((a, b) => a.order_no - b.order_no));
+};
 export const match = (c) => T.a2_match.get(c);
-export const fields = () => [...T.a2_field.values()].filter((f) => f.no <= event().field_count).sort((a, b) => a.no - b.no);
+export const fields = () => {
+  const cnt = event().field_count;
+  if (_cFields && _fSize === T.a2_field.size && _fCnt === cnt) return _cFields;
+  _fSize = T.a2_field.size; _fCnt = cnt;
+  return (_cFields = [...T.a2_field.values()].filter((f) => f.no <= cnt).sort((a, b) => a.no - b.no));
+};
 export const field = (n) => T.a2_field.get(n);
-export const groups = () => [...T.a2_group.values()].sort((a, b) => a.grp.localeCompare(b.grp));
+export const groups = () => {
+  if (_cGroups && _gSize === T.a2_group.size) return _cGroups;
+  _gSize = T.a2_group.size;
+  return (_cGroups = [...T.a2_group.values()].sort((a, b) => a.grp.localeCompare(b.grp)));
+};
 export const teamAbsent = (seed) => !!T.a2_team.get(seed)?.absent;
-export const gamesOf = (code) => [...T.a2_game.values()].filter((g) => g.match_code === code && g.status !== "void").sort((a, b) => a.idx - b.idx);
-export const openGame = (code) => gamesOf(code).filter((g) => ["ready", "live", "review"].includes(g.status)).pop() || null;
-export const gameNo = (code, g) => gamesOf(code).filter((x) => x.idx <= g.idx && x.status !== "replay").length;
+export const gamesOf = (code) => {
+  if (!_cGames || _gaSize !== T.a2_game.size) {
+    _gaSize = T.a2_game.size;
+    _cGames = new Map();
+    for (const g of T.a2_game.values()) {
+      if (g.status === "void") continue;
+      let arr = _cGames.get(g.match_code);
+      if (!arr) _cGames.set(g.match_code, (arr = []));
+      arr.push(g);
+    }
+    for (const arr of _cGames.values()) arr.sort((a, b) => a.idx - b.idx);
+  }
+  return _cGames.get(code) || EMPTY;
+};
+export const openGame = (code) => {
+  const gs = gamesOf(code);
+  for (let i = gs.length - 1; i >= 0; i--) {
+    const st = gs[i].status;
+    if (st === "ready" || st === "live" || st === "review") return gs[i];
+  }
+  return null;
+};
+export const gameNo = (code, g) => {
+  let n = 0;
+  for (const x of gamesOf(code)) { if (x.idx <= g.idx && x.status !== "replay") n++; }
+  return n;
+};
 export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
 export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} Group ${src.g}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
-export const tableOf = (grp) => S.standings.filter((r) => r.grp === grp).sort((a, b) => a.pos - b.pos);
+export const tableOf = (grp) => {
+  if (!_cTable || _stRef !== S.standings) {
+    _stRef = S.standings;
+    _cTable = new Map();
+    for (const r of S.standings) {
+      let arr = _cTable.get(r.grp);
+      if (!arr) _cTable.set(r.grp, (arr = []));
+      arr.push(r);
+    }
+    for (const arr of _cTable.values()) arr.sort((a, b) => a.pos - b.pos);
+  }
+  return _cTable.get(grp) || EMPTY;
+};
 export const STATUS_TH = { locked: "รอผล", ready: "พร้อม", queued: "อยู่ในสนาม", live: "กำลังแข่ง", done: "จบแล้ว" };
 export const METHOD_TH = { full: "จอดครบเร็วกว่า (6.1)", count: "จอดได้มากกว่า (6.2)", lift: "ยกแท่นแรกก่อน (6.3)", exit: "ออกจากกรอบแดงก่อน (6.4)", judge: "กรรมการตัดสิน" };
 
@@ -79,23 +144,32 @@ export function previewDecide(g) {
 export const REASON_TH = { replay: "ผลเท่ากันทุกอย่าง ต้องแข่งใหม่ด้วยแบบสนามเดิม (FAQ 34)", judge: "ไม่มีทีมไหนออกจากกรอบแดง กรรมการต้องตัดสิน (FAQ 35)" };
 
 // ---------- Load and subscribe to data ----------
+let _lastLoad = 0, _loadSeq = 0;
 export async function loadAll() {
+  const seq = ++_loadSeq;
   const q = (t) => sb.from(t).select("*");
   const [ev, tm, ma, ga, fi, tb, st, rk, gr] = await Promise.all([q("a2_event"), q("a2_team"), q("a2_match"), q("a2_game"), q("a2_field"), q("a2_tiebreak"), sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*"), q("a2_group")]);
   const mk = OPT.marks ? await q("a2_mark") : { data: [] };
   const err = [ev, tm, ma, ga, fi, tb, st, rk, gr, mk].find((r) => r.error);
   if (err) throw err.error;
+  if (seq !== _loadSeq) return;
   const fill = (name, rows) => { const m = T[name]; m.clear(); rows.forEach((r) => m.set(r[PK[name]], r)); };
   fill("a2_event", ev.data); fill("a2_team", tm.data); fill("a2_match", ma.data); fill("a2_game", ga.data); fill("a2_field", fi.data); fill("a2_tiebreak", tb.data); fill("a2_group", gr.data); fill("a2_mark", mk.data);
+  invalidateData(); invalidateStandings();
   S.standings = st.data; S.ranking = rk.data.sort((a, b) => a.pos - b.pos); S.ready = true;
+  _lastLoad = Date.now();
   notify();
 }
-let stT = 0;
-async function reloadDerived() {
+let stT = 0, _derSeq = 0;
+function reloadDerived() {
   clearTimeout(stT);
   stT = setTimeout(async () => {
+    const seq = ++_derSeq;
     const [st, rk] = await Promise.all([sb.from("a2_v_standings").select("*"), sb.from("a2_v_ranking").select("*")]);
-    if (!st.error) S.standings = st.data; if (!rk.error) S.ranking = rk.data.sort((a, b) => a.pos - b.pos); notify();
+    if (seq !== _derSeq) return;
+    if (!st.error) { invalidateStandings(); S.standings = st.data; }
+    if (!rk.error) S.ranking = rk.data.sort((a, b) => a.pos - b.pos);
+    notify();
   }, 120);
 }
 export function paintNet() { const s = S.net; document.querySelectorAll("[data-net]").forEach((e) => { e.className = "netdot " + s; e.querySelector("b").textContent = { on: "Online", wait: "Connecting", err: "Offline" }[s]; }); }
@@ -110,6 +184,7 @@ export function connect() {
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (p) => {
         const row = p.eventType === "DELETE" ? p.old : p.new, m = T[t];
         if (p.eventType === "DELETE") m.delete(row[PK[t]]); else m.set(row[PK[t]], { ...(m.get(row[PK[t]]) || {}), ...row });
+        invalidateData(t);
         if (t === "a2_match" || t === "a2_game" || t === "a2_tiebreak" || t === "a2_group") reloadDerived();
         notify();
       });
@@ -120,9 +195,13 @@ export function connect() {
     });
   };
   open();
-  setInterval(() => loadAll().catch(() => {}), 30000);
+  // Poll less aggressively when realtime is healthy; keep fast fallback if offline or stale
+  setInterval(() => {
+    if (document.hidden) return;
+    if (S.net !== "on" || Date.now() - _lastLoad > 120000) loadAll().catch(() => {});
+  }, 15000);
   setInterval(() => sb.rpc("a2_tick").then(() => {}), 8000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadAll().catch(() => {}); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - _lastLoad > 15000) loadAll().catch(() => {}); });
 }
 export async function rpc(name, args) {
   const { data, error } = await sb.rpc(name, args);
