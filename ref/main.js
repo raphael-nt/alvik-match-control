@@ -113,7 +113,8 @@ function matchView(f, m, g) {
   const replay = gamesOf(m.code).some((x) => x.status === "replay" && x.idx === g.idx - 1);
   let body = "";
   if (ph === "idle") {
-    body = `<section><h3>Field pattern</h3><div class="pat">${[1, 2, 3].map((n) => `<button class="btn${g.pattern === n ? " on" : ""}" data-pat="${n}" ${replay ? "disabled" : ""}>${n}</button>`).join("")}<button class="btn" data-pat="r" ${replay ? "disabled" : ""}>Random</button></div>
+    body = `<section><h3>Field pattern</h3><div class="pat">${[1, 2, 3].map((n) => `<button class="btn patb${g.pattern === n ? " on" : ""}" data-pat="${n}" ${replay ? "disabled" : ""}><img src="../shared/patterns/pattern${n}.png" alt="Pattern ${n}"><span>แบบที่ ${n}</span></button>`).join("")}</div>
+      <button class="btn" data-pat="r" ${replay ? "disabled" : ""}>สุ่มแบบสนาม (Random)</button>
       ${replay ? `<p class="muted">เกมแข่งใหม่ ใช้แบบสนามเดิม (FAQ 34)</p>` : `<p class="muted">สุ่มก่อนเริ่ม Setup สองทีมใช้แบบเดียวกัน (2.3)</p>`}</section>
       <button class="btn primary big" data-fl="start" ${g.pattern ? "" : "disabled"}>Start setup ${fmtMs(event().setup_ms)}</button>
       <div class="row"><button class="btn" id="absent">Team absent</button></div>
@@ -124,7 +125,8 @@ function matchView(f, m, g) {
     body = `${clockBox()}<section><h3>Pre-start checklist</h3>
       ${ck1("red_in", "Red robot fully inside red box", "ทุกส่วนอยู่ในกรอบแดง ทับเส้นได้ (FAQ 3)")}
       ${ck1("blue_in", "Blue robot fully inside red box", "ทุกส่วนอยู่ในกรอบแดง ทับเส้นได้ (FAQ 3)")}
-      ${ck1("stands", `Stands placed as pattern ${g.pattern}, both sides`, "กลางแท่นตรงจุด ขอบขนานเส้นสนาม (FAQ 4)")}</section>
+      ${ck1("stands", `Stands placed as pattern ${g.pattern}, both sides`, "กลางแท่นตรงจุด ขอบขนานเส้นสนาม (FAQ 4)")}
+      ${g.pattern ? `<img class="patbig" src="../shared/patterns/pattern${g.pattern}.png" alt="Pattern ${g.pattern}">` : ""}</section>
       <button class="btn primary huge" id="go" ${ph === "ready" && all ? "" : "disabled"}>Start</button>
       ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด แล้วเลือกเล่นต่อหรือข้าม</p>` : ""}`;
   } else if (ph === "countdown") {
