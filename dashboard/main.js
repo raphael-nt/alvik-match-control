@@ -103,25 +103,44 @@ setInterval(() => { if (cur === "draw") render(); }, 800);
 
 // ---------- Clock, 3 2 1 sound and 8 second result banner ----------
 let lp = null, ls = null, lastDone = null, bnUntil = 0;
+let _ct = "", _ctCls = "", _cp = "", _cm = "", _cd = "", _bn = "", _bnMc = "", _bnGs = null;
 raf(() => {
   const f = field(1), ct = $("ct"); if (!f || !ct) return;
   const ck = clockV3(f), sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
-  ct.textContent = ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms);
-  ct.className = "t" + (ck.phase === "game" && ck.ms <= 10000 ? " warn" : ck.phase === "stopped" ? " stop" : "");
-  $("cp").textContent = PHASE_EN[ck.phase];
+  const ctTxt = ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms);
+  const ctCls = "t" + (ck.phase === "game" && ck.ms <= 10000 ? " warn" : ck.phase === "stopped" ? " stop" : "");
+  const cpTxt = PHASE_EN[ck.phase];
+  if (ctTxt !== _ct) { _ct = ctTxt; ct.textContent = ctTxt; }
+  if (ctCls !== _ctCls) { _ctCls = ctCls; ct.className = ctCls; }
+  if (cpTxt !== _cp) { _cp = cpTxt; $("cp").textContent = cpTxt; }
   const m = match(f.match_code), g = m && openGame(m.code);
-  $("cm").textContent = ck.phase === "stopped" && g?.complete_side ? `${g.complete_side.toUpperCase()} mission complete ${fmtMs1(f.stop_ms)}` : "";
-  $("cd").innerHTML = ck.phase === "countdown" ? `<div class="cd">${ck.count}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
+  const cmTxt = ck.phase === "stopped" && g?.complete_side ? `${g.complete_side.toUpperCase()} mission complete ${fmtMs1(f.stop_ms)}` : "";
+  if (cmTxt !== _cm) { _cm = cmTxt; $("cm").textContent = cmTxt; }
+  const cdHtml = ck.phase === "countdown" ? `<div class="cd">${ck.count}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
+  if (cdHtml !== _cd) { _cd = cdHtml; $("cd").innerHTML = cdHtml; }
   if (ck.phase === "countdown" && sec !== ls) snd(880, 120);
   if (ck.phase === "game" && lp === "countdown") snd(1320, 700);
   if (ck.phase === "game" && sec <= 5 && sec > 0 && sec !== ls) snd(880, 90);
   if ((ck.phase === "over" && lp === "game") || (ck.phase === "stopped" && lp === "game")) snd(440, 900);
   lp = ck.phase; ls = sec;
   if (m) {
-    const d = gamesOf(m.code).filter((x) => x.status === "done" || x.status === "replay").sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
-    if (d && d.id + d.version !== lastDone) { if (lastDone !== null && Date.now() - Date.parse(d.updated_at) < 8000) bnUntil = Date.now() + 8000; lastDone = d.id + d.version;
-      $("bn").dataset.t = d.status === "replay" ? "Tie, replay with same pattern" : `${d.winner.toUpperCase()} wins Game ${gameNo(m.code, d)} · ${RULE_EN[d.method] || ""}`; }
-    $("bn").innerHTML = Date.now() < bnUntil ? `<div class="banner8">${esc($("bn").dataset.t)}</div>` : "";
+    const gs = gamesOf(m.code), bnEl = $("bn");
+    if (gs !== _bnGs || m.code !== _bnMc) {
+      _bnGs = gs; _bnMc = m.code;
+      let d = null, bestTs = -1;
+      for (const x of gs) {
+        if (x.status !== "done" && x.status !== "replay") continue;
+        const ts = Date.parse(x.updated_at);
+        if (ts > bestTs) { bestTs = ts; d = x; }
+      }
+      if (d && d.id + d.version !== lastDone) {
+        if (lastDone !== null && Date.now() - bestTs < 8000) bnUntil = Date.now() + 8000;
+        lastDone = d.id + d.version;
+        bnEl.dataset.t = d.status === "replay" ? "Tie, replay with same pattern" : `${d.winner.toUpperCase()} wins Game ${gameNo(m.code, d)} (${RULE_EN[d.method] || ""})`;
+      }
+    }
+    const bnHtml = Date.now() < bnUntil ? `<div class="banner8">${esc(bnEl.dataset.t)}</div>` : "";
+    if (bnHtml !== _bn) { _bn = bnHtml; bnEl.innerHTML = bnHtml; }
   }
 });
 render();

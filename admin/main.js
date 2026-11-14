@@ -1,7 +1,7 @@
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
-import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
+import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
 useMarks();
@@ -240,10 +240,10 @@ function clearDownstream(f, afterRoundIdx) {
   });
 }
 
-function fmtSummary(f) {
-  const err = validateFormat(f);
+function fmtSummary(f, built = null) {
+  const err = validateFormat(f, built);
   if (err.length) return `<div class="warn">${err.map(esc).join("<br>")}</div>`;
-  const b = buildFormat(f), gm = b.matches.filter((m) => m.grp), ko = b.matches.filter((m) => !m.grp), st = [...new Set(ko.map((m) => stageLabel(m.stage)))];
+  const b = built || buildFormat(f), gm = b.matches.filter((m) => m.grp), ko = b.matches.filter((m) => !m.grp), st = [...new Set(ko.map((m) => stageLabel(m.stage)))];
   return `<p class="muted" style="margin:6px 0 0">${b.format.teams} teams, ${gm.length} group matches${ko.length ? `, ${ko.length} non-group matches (${st.join(", ")})` : ", no knockout"}</p>`;
 }
 
@@ -273,8 +273,8 @@ function groupRoundHtml(f, r, rIdx) {
     ${slotsHtml}</div>`;
 }
 
-function koRoundHtml(f, ko) {
-  const b = buildFormat(f);
+function koRoundHtml(f, ko, built = null) {
+  const b = built || buildFormat(f);
   const subs = b.koStages.map((st) => {
     const opts = [...(st.allowBye ? [""] : []), ...st.options], pairs = [];
     for (let i = 0; i < st.slots.length; i += 2) pairs.push([i, st.slots[i], st.slots[i + 1]]);
@@ -292,22 +292,45 @@ function koRoundHtml(f, ko) {
     ${subs || `<div class="muted">Need at least 2 advancing teams from the previous round</div>`}</div>`;
 }
 
+let _cSrcCache = null;
+function customSrcItems(f) {
+  if (_cSrcCache && _cSrcCache.f === f) return _cSrcCache.items;
+  const items = [];
+  for (let s = 1; s <= f.teams; s++) { const k = "s" + s; items.push({ k, code: "", html: `<option value="${esc(k)}">${esc(slotLabel(k))}</option>` }); }
+  (f.customGroups || []).forEach((g) => { for (let p = 1; p <= g.srcs.length; p++) { const k = g.grp + p; items.push({ k, code: "", html: `<option value="${esc(k)}">${esc(slotLabel(k))}</option>` }); } });
+  (f.customMatches || []).forEach((m) => {
+    if (!m.code) return;
+    items.push({ k: "w:" + m.code, code: m.code, html: `<option value="${esc("w:" + m.code)}">${esc(slotLabel("w:" + m.code))}</option>` });
+    items.push({ k: "l:" + m.code, code: m.code, html: `<option value="${esc("l:" + m.code)}">${esc(slotLabel("l:" + m.code))}</option>` });
+  });
+  _cSrcCache = { f, items };
+  return items;
+}
 function customSrcOpts(f, excludeCode, curVal) {
-  const keys = [];
-  for (let s = 1; s <= f.teams; s++) keys.push("s" + s);
-  (f.customGroups || []).forEach((g) => { for (let p = 1; p <= g.srcs.length; p++) keys.push(g.grp + p); });
-  (f.customMatches || []).forEach((m) => { if (m.code && m.code !== excludeCode) { keys.push("w:" + m.code, "l:" + m.code); } });
-  if (curVal && !keys.includes(curVal)) keys.unshift(curVal);
-  return `<option value="">Select</option>` + keys.map((k) => `<option value="${esc(k)}" ${k === curVal ? "selected" : ""}>${esc(slotLabel(k))}</option>`).join("");
+  const items = customSrcItems(f);
+  const parts = [`<option value="">Select</option>`];
+  let found = !curVal;
+  for (const it of items) {
+    if (excludeCode && it.code === excludeCode) continue;
+    if (it.k === curVal) found = true;
+    parts.push(it.html);
+  }
+  if (!found) parts.splice(1, 0, `<option value="${esc(curVal)}">${esc(slotLabel(curVal))}</option>`);
+  return parts.join("");
+}
+function slimSrcOpt(curVal) {
+  const v = curVal || "";
+  return `<option value="${esc(v)}" selected>${esc(v ? slotLabel(v) : "Select")}</option>`;
 }
 
 function customFormatHtml(f) {
+  _cSrcCache = null;
   const cGrps = f.customGroups || [], cMs = f.customMatches || [];
   const gRows = cGrps.map((g, gi) => `<tr>
     <td><input maxlength="1" style="width:46px" value="${esc(g.grp)}" data-cgi="${gi}" data-cgk="grp"></td>
     <td><select data-cgi="${gi}" data-cgk="stage">${stageOpts(g.stage)}</select></td>
     <td><input type="number" min="0" max="${g.srcs.length}" style="width:64px" value="${g.adv}" data-cgi="${gi}" data-cgk="adv"></td>
-    <td><div class="fslots-row">${g.srcs.map((k, si) => `<select data-cgslot="${gi}:${si}">${customSrcOpts(f, "", k)}</select>`).join("")}
+    <td><div class="fslots-row">${g.srcs.map((k, si) => `<select data-cgslot="${gi}:${si}" data-csrc="1">${slimSrcOpt(k)}</select>`).join("")}
       <button class="btn small" data-act="cgslotadd" data-i="${gi}">+Slot</button>
       ${g.srcs.length > 1 ? `<button class="btn small" data-act="cgslotdel" data-i="${gi}">-Slot</button>` : ""}</div></td>
     <td><button class="btn small" data-act="cgrr" data-i="${gi}">Gen RR</button> <button class="btn small" data-act="cgdel" data-i="${gi}">Remove</button></td></tr>`).join("");
@@ -317,8 +340,8 @@ function customFormatHtml(f) {
     <td><select data-cmi="${mi}" data-cmk="stage">${stageOpts(m.stage)}</select></td>
     <td><select data-cmi="${mi}" data-cmk="grp">${gSelOpts(m.grp || "")}</select></td>
     <td><select data-cmi="${mi}" data-cmk="bo">${boOpts(m.bo)}</select></td>
-    <td><select data-cmi="${mi}" data-cmk="red">${customSrcOpts(f, m.code, m.red)}</select></td>
-    <td><select data-cmi="${mi}" data-cmk="blue">${customSrcOpts(f, m.code, m.blue)}</select></td>
+    <td><select data-cmi="${mi}" data-cmk="red" data-csrc="1">${slimSrcOpt(m.red)}</select></td>
+    <td><select data-cmi="${mi}" data-cmk="blue" data-csrc="1">${slimSrcOpt(m.blue)}</select></td>
     <td><button class="btn small" data-act="cmup" data-i="${mi}" ${mi === 0 ? "disabled" : ""}>Up</button>
       <button class="btn small" data-act="cmdn" data-i="${mi}" ${mi === cMs.length - 1 ? "disabled" : ""}>Down</button>
       <button class="btn small danger" data-act="cmdel" data-i="${mi}">Del</button></td></tr>`).join("");
@@ -326,6 +349,47 @@ function customFormatHtml(f) {
     ${cGrps.length ? `<div class="tw"><table class="tbl ctbl"><thead><tr><th>Group</th><th>Stage</th><th>Advance</th><th>Team slots</th><th></th></tr></thead><tbody>${gRows}</tbody></table></div>` : `<div class="muted">No custom groups</div>`}</div>
     <div class="fround"><div class="fh"><h3>Custom matches (${cMs.length})</h3><button class="btn small" data-act="cmadd" ${cMs.length >= 400 ? "disabled" : ""}>+ Add match</button></div>
     <div class="tw"><table class="tbl ctbl"><thead><tr><th>#</th><th>Code</th><th>Stage</th><th>Group</th><th>Bo</th><th>Red</th><th>Blue</th><th></th></tr></thead><tbody>${mRows}</tbody></table></div></div>`;
+}
+
+// ---------- Quick setup : the few settings most events need. Details stay in a collapsed section ----------
+let fmtDetOpen = false;
+// Read the quick values back from the current format; "advanced" when the format has more than one group round or custom matches
+function quickOf(f) {
+  const g = f.rounds.filter((r) => r.type === "groups"), ko = koOf(f), bo = ko ? ko.bo_by_stage || {} : {};
+  const mode = Array.isArray(f.customMatches) || g.length > 1 ? "advanced" : g.length && ko ? "gko" : g.length ? "g" : "ko";
+  const g0 = g[0];
+  return { mode, teams: f.teams, groups: g0 ? g0.groups.length : 2, adv: g0 ? Math.max(0, ...g0.groups.map((x) => x.adv)) : 2,
+    bo_group: g0 ? g0.bo : 3, bo_ko: bo.sf || bo.qf || 3, bo_final: bo.final || 5, third: !!(ko && ko.third) };
+}
+// Rebuild the format from quick values. Teams are spread as evenly as possible (10 teams in 3 groups : 4, 3, 3)
+function quickApply(q) {
+  const teams = Math.max(2, Math.min(64, Math.trunc(+q.teams || 2)));
+  const rounds = [];
+  if (q.mode !== "ko") {
+    const G = Math.max(1, Math.min(Math.floor(teams / 2), 26, Math.trunc(+q.groups || 1)));
+    const base = Math.floor(teams / G), extra = teams % G;
+    const groups = [...Array(G).keys()].map((i) => { const size = base + (i < extra ? 1 : 0); return { grp: "A", size, adv: q.mode === "g" ? 0 : Math.max(1, Math.min(size, Math.trunc(+q.adv || 1))), srcs: null }; });
+    rounds.push({ id: "r1", type: "groups", bo: +q.bo_group || 3, groups });
+  }
+  if (q.mode !== "g") rounds.push(defaultKoRound({ bo_ko: +q.bo_ko || 3, bo_final: +q.bo_final || 5, third: !!q.third }));
+  fmt = reletter({ teams, rounds, customGroups: null, customMatches: null });
+}
+function quickHtml(f, built) {
+  const q = quickOf(f), sel = (k, opts) => `<select data-q="${k}">${opts.map(([v, t]) => `<option value="${v}" ${String(q[k]) === String(v) ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+  const bo = (k) => sel(k, BOS.map((n) => [n, "Bo" + n]));
+  if (q.mode === "advanced") return `<div class="fquick"><p class="muted" style="margin:0">รูปแบบนี้ตั้งแบบละเอียดไว้ (หลายรอบกลุ่ม หรือจัดคู่เอง) แก้ได้ในส่วน "ตั้งค่าละเอียด" ด้านล่าง หรือเลือกแบบง่ายใหม่ <button class="btn small" data-act="fquickreset">เริ่มแบบง่ายใหม่</button></p></div>`;
+  // Who gets a bye in the first knockout round, so the admin sees it before applying
+  const st0 = built && built.koStages && built.koStages[0], byes = st0 ? (() => { const out = []; for (let i = 0; i < st0.slots.length; i += 2) { const a = st0.slots[i], b = st0.slots[i + 1]; if (a && !b) out.push(a); if (b && !a) out.push(b); } return out; })() : [];
+  return `<div class="fquick">
+    <label>รูปแบบ${sel("mode", [["gko", "แบ่งกลุ่ม แล้วแพ้คัดออก"], ["ko", "แพ้คัดออกล้วน"], ["g", "แบ่งกลุ่มอย่างเดียว"]])}</label>
+    <label>จำนวนทีม<input type="number" min="2" max="64" value="${q.teams}" data-q="teams"></label>
+    ${q.mode !== "ko" ? `<label>จำนวนกลุ่ม<input type="number" min="1" max="26" value="${q.groups}" data-q="groups"></label>` : ""}
+    ${q.mode === "gko" ? `<label>เข้ารอบกลุ่มละ<input type="number" min="1" max="64" value="${q.adv}" data-q="adv"></label>` : ""}
+    ${q.mode !== "ko" ? `<label>Bo รอบกลุ่ม${bo("bo_group")}</label>` : ""}
+    ${q.mode !== "g" ? `<label>Bo แพ้คัดออก${bo("bo_ko")}</label><label>Bo รอบชิง${bo("bo_final")}</label>
+      <label class="chk2"><input type="checkbox" data-q="third" ${q.third ? "checked" : ""}>มีชิงที่ 3</label>` : ""}
+  </div>
+  ${byes.length ? `<p class="muted" style="margin:6px 0 0">ได้บายข้ามรอบแรก : ${byes.map((k) => esc(slotLabel(k))).join(", ")}</p>` : ""}`;
 }
 
 // The whole format card; redrawn after every change
@@ -338,8 +402,10 @@ function fmtCard(played) {
       <button class="btn small" data-act="fraddg" ${totalGroupsCount(f) >= 26 ? "disabled" : ""}>+ Group round</button>
       ${!ko ? `<button class="btn small" data-act="fraddko">+ Knockout</button>` : ""}
       <button class="btn small" data-act="fmtcustom">Customize matches</button>`}</div>`;
-  const body = isCustom ? customFormatHtml(f) : f.rounds.map((r, ri) => (r.type === "groups" ? groupRoundHtml(f, r, ri) : koRoundHtml(f, r))).join("");
-  return `<div class="card fmtc">${topBar}${body}<div id="fsum">${fmtSummary(f)}</div>
+  const built = isCustom ? null : buildFormat(f);
+  const body = isCustom ? customFormatHtml(f) : f.rounds.map((r, ri) => (r.type === "groups" ? groupRoundHtml(f, r, ri) : koRoundHtml(f, r, built))).join("");
+  return `<div class="card fmtc">${quickHtml(f, built)}<div id="fsum">${fmtSummary(f, built)}</div>
+    <details class="fdet" ${fmtDetOpen ? "open" : ""}><summary>ตั้งค่าละเอียด : ขนาดแต่ละกลุ่ม หลายรอบกลุ่ม จัดคู่และสายเอง</summary>${topBar}${body}</details>
     <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button><button class="btn" data-act="fmtundo">Undo changes</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
 }
 function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void")); }
@@ -463,8 +529,16 @@ const VIEW = { home: homeView, queue: queueView, schedule: scheduleView, groups:
 // ---------- Clock ----------
 function clocks() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
-  document.querySelectorAll("[data-clk]").forEach((el) => { el.textContent = ck.phase === "countdown" ? String(ck.count) : ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms); el.classList.toggle("warn", ck.phase === "game" && ck.ms <= 10000); });
-  document.querySelectorAll("[data-ph]").forEach((el) => { el.textContent = PHASE_EN[ck.phase] + (ck.phase === "stopped" ? " (Mission complete)" : ""); });
+  const clkTxt = ck.phase === "countdown" ? String(ck.count) : ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms);
+  const warn = ck.phase === "game" && ck.ms <= 10000;
+  const phTxt = PHASE_EN[ck.phase] + (ck.phase === "stopped" ? " (Mission complete)" : "");
+  document.querySelectorAll("[data-clk]").forEach((el) => {
+    if (el._clk !== clkTxt) { el._clk = clkTxt; el.textContent = clkTxt; }
+    if (el._warn !== warn) { el._warn = warn; el.classList.toggle("warn", warn); }
+  });
+  document.querySelectorAll("[data-ph]").forEach((el) => {
+    if (el._ph !== phTxt) { el._ph = phTxt; el.textContent = phTxt; }
+  });
 }
 
 // ---------- Button handlers ----------
@@ -541,6 +615,7 @@ const H = {
     if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "Format applied") !== undefined) { fmt = null; await loadAll(); formTab = ""; render(); }
   },
   fmtundo() { fmt = null; redrawFmt(); },
+  fquickreset() { quickApply({ ...quickOf(fmtDefaults()), mode: "gko" }); redrawFmt(); },
   fmtcustom() { fmt = materializeCustom(fmtEdit()); redrawFmt(); },
   fmtauto() { if (!confirm("ทิ้งการแก้ไขแบบ Custom แล้วกลับไปใช้ตัวสร้างรอบอัตโนมัติ")) return; const f = fmtEdit(); f.customMatches = null; f.customGroups = null; redrawFmt(); },
   fraddg() {
@@ -645,6 +720,7 @@ document.addEventListener("change", async (e) => {
 });
 document.addEventListener("change", (e) => {
   const t = e.target; if (!t.closest || !t.closest(".fmtc")) return;
+  if (t.dataset.q) { const q = quickOf(fmtEdit()); q[t.dataset.q] = t.type === "checkbox" ? t.checked : t.dataset.q === "mode" ? t.value : +t.value; quickApply(q); redrawFmt(); return; }
   const f = fmtEdit();
   if (t.dataset.fk === "teams") { f.teams = +t.value; const ko = koOf(f); if (ko && !Array.isArray(f.customMatches)) { ko.slots = null; ko.links = null; } }
   else if (t.dataset.rgbo !== undefined) { f.rounds[+t.dataset.rgbo].bo = +t.value; }
@@ -693,6 +769,21 @@ document.addEventListener("change", async (e) => {
   if (on && !confirm(`${teamName(seed)} ไม่มา แพ้บายทุกคู่ที่เหลือ`)) { c.checked = false; return; }
   if ((await act(() => adm("a2_adm_absent", { p_seed: seed, p_absent: on }), on ? "ตั้งเป็นไม่มาแล้ว" : "ยกเลิกไม่มาแล้ว")) === undefined) c.checked = !on;
 });
+function hydrateCustomSelect(t) {
+  const sel = t?.closest?.("select[data-csrc]");
+  if (!sel || sel.dataset.hydrated) return;
+  sel.dataset.hydrated = "1";
+  const f = fmtEdit(), cur = sel.value || "";
+  const ex = sel.dataset.cmk ? f.customMatches?.[+sel.dataset.cmi]?.code || "" : "";
+  sel.innerHTML = customSrcOpts(f, ex, cur);
+  sel.value = cur;
+}
+document.addEventListener("pointerdown", (e) => hydrateCustomSelect(e.target), true);
+document.addEventListener("mousedown", (e) => hydrateCustomSelect(e.target), true);
+document.addEventListener("focusin", (e) => hydrateCustomSelect(e.target));
 document.addEventListener("click", (e) => { if (e.target.closest('[data-tab="log"]')) loadLog(); });
 
 boot();
+
+// Remember whether the detailed format editor is open across redraws
+document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("fdet")) fmtDetOpen = e.target.open; }, true);

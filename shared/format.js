@@ -425,7 +425,7 @@ function dagError(groups, matches) {
   return "";
 }
 
-export function validate(f0) {
+export function validate(f0, built = null) {
   const f = normalize(f0), e = [];
   if (Array.isArray(f.customMatches)) {
     if (!Number.isInteger(f.teams) || f.teams < 2 || f.teams > LIMITS.teams) e.push(`Teams must be 2 to ${LIMITS.teams}`);
@@ -527,7 +527,7 @@ export function validate(f0) {
   });
 
   if (!e.length) {
-    const b = build(f);
+    const b = built || build(f);
     if (b.matches.length < 1 || b.matches.length > LIMITS.matches) e.push(`Total matches must be 1 to ${LIMITS.matches} (got ${b.matches.length})`);
     const de = dagError(b.groups, b.matches);
     if (de) e.push(de);
