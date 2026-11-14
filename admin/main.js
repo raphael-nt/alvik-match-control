@@ -2,7 +2,7 @@ import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
-import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
+import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb } from "../shared/common.js";
 
 useMarks();
 const fields = () => [field(1)].filter(Boolean);   // v3 single field
@@ -159,7 +159,7 @@ function queueView() {
   else {
     const g = openGame(m.code), done = m.status === "done", c = f.checks || {};
     card = `<div class="card fc st-${m.status}"><div class="h2"><h2>On field  ${m.code}</h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><span>Referee ${refOnline(f) ? "online" : "offline"}</span></div>
-      <div class="vs"><span>${stageLabel(m.stage)}${m.grp ? " Group " + m.grp : ""}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
+      <div class="vs"><span>${stageLabel(m.stage)}${m.grp ? " " + esc(grpName(m.grp)) : ""}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
       <div class="muted">${done ? "Match finished · ผู้ชนะ " + esc(teamName(m.winner_seed)) : (g ? "Game " + gameNo(m.code, g) + " of " + m.bo : "") + (g?.pattern ? " · Pattern " + g.pattern : " · ยังไม่เลือกแบบสนาม")}${!done && ["setup", "ready"].includes(f.phase) ? ` · Checklist ${["red_in", "blue_in", "stands"].filter((k) => c[k]).length}/3` : ""}</div>
       <div class="t" data-clk>1:30.0</div><div class="muted" data-ph></div>
       <div class="btns">${done ? (nx.length ? `<button class="btn primary" data-act="open" data-c="${nx[0].code}">Call next match ${nx[0].code}</button>` : "") : flowBtns(f)}
@@ -174,40 +174,104 @@ function queueView() {
 // ---------- Schedule tab ----------
 const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const hm = (iso) => iso ? fmtTime(iso) : "";
+// Schedule settings are kept per browser so the admin does not retype them
+const SC_DEF = { day: "", start: "09:00", auto: true, mins: {}, breaks: [{ at: "12:00", min: 60, label: "พักเที่ยง" }],
+  pday: "", pstart: "09:00", pmin: 10, pgames: 2, pbo: 1 };
+let sc = (() => { try { return { ...SC_DEF, ...JSON.parse(localStorage.getItem("a2sched") || "{}") }; } catch (e) { return { ...SC_DEF }; } })();
+const scSave = () => { try { localStorage.setItem("a2sched", JSON.stringify(sc)); } catch (e) {} };
+const DEF_MIN = { r1: 12, r2: 12, r3: 12, r4: 12, practice: 10, r64: 15, r32: 15, r16: 15, qf: 15, sf: 15, third: 15, final: 20 };
+const isPractice = (m) => m.stage === "practice";
+const compMatches = () => matches().filter((m) => !isPractice(m));
+const pracMatches = () => matches().filter(isPractice);
+const dayOf = (iso) => { const d = new Date(iso); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const hhmm = (ms) => { const d = new Date(ms); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+// Stage order as matches appear, so the per-stage minute fields follow the format
+const stagesInUse = () => [...new Set(compMatches().map((m) => m.stage))];
+const minOf = (st) => +(sc.mins[st] ?? DEF_MIN[st] ?? 12);
+// Give each item a start time from t0, one after another; a match that would run into a break starts after it
+function timeline(day, start, items, durOf) {
+  const at = (hm) => new Date(day + "T" + hm + ":00").getTime();
+  const brs = sc.breaks.filter((x) => x.at && +x.min > 0).map((x) => ({ s: at(x.at), e: at(x.at) + x.min * 60000 })).sort((x, y) => x.s - y.s);
+  let t = at(start); const out = [];
+  items.forEach((it) => {
+    const d = durOf(it) * 60000;
+    for (const br of brs) if (t < br.e && t + d > br.s) t = br.e;
+    out.push({ it, t }); t += d;
+  });
+  return out;
+}
+function breaksHtml() {
+  return `<div class="tl"><b>ช่วงพัก</b><span class="muted">ใช้ทั้งวันแข่งและวันซ้อม คู่ที่จะคาบเกี่ยวช่วงพักจะเลื่อนไปเริ่มหลังพัก</span>
+    ${sc.breaks.map((x, i) => `<div class="row"><input type="time" value="${esc(x.at)}" data-brk="${i}" data-bk="at"><input type="number" min="5" step="5" value="${x.min}" data-brk="${i}" data-bk="min" style="max-width:90px"><span class="muted">นาที</span>
+      <input value="${esc(x.label || "")}" placeholder="ชื่อช่วงพัก" data-brk="${i}" data-bk="label"><button class="btn small" data-act="brdel" data-i="${i}">ลบ</button></div>`).join("")}
+    <div class="row"><button class="btn small" data-act="bradd">+ เพิ่มช่วงพัก</button></div></div>`;
+}
 function scheduleView() {
-  const nf = 1, first = matches().find((m) => m.sched_at);
-  const day = first ? (() => { const d = new Date(first.sched_at); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })() : todayStr();
-  return `<div class="h2"><h2>Schedule</h2><span>ระบบเปิดคิวให้เองเมื่อถึงเวลา โดยต้องรู้ผู้เล่นครบและสนามว่าง ยังเปิดก่อนเวลาเองได้เสมอ</span></div>
-   <div class="card" style="margin-bottom:14px"><div class="form" style="max-width:none"><div class="gf" style="grid-template-columns:repeat(5,minmax(0,1fr))">
-     <label>วันแข่ง<input type="date" id="sd" value="${day}"></label><label>เวลาเริ่มคู่แรก<input type="time" id="s0" value="09:00"></label>
-     <label>ห่างกันรอบละ (นาที)<input type="number" id="si" min="1" value="12"></label><label>เปิดอัตโนมัติ<select id="sa"><option value="1">เปิด</option><option value="0">ปิด</option></select></label>
-     <button class="btn primary" data-act="autofill" style="align-self:end">Auto fill</button></div>
-     <p class="muted" style="margin:0">เติมตามลำดับคู่ คู่ละช่วงเวลา จากนั้นแก้รายคู่ได้ แล้วกดบันทึก</p></div></div>
-   <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Teams</th><th>Time</th><th>Auto call</th><th></th></tr></thead><tbody>${matches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
+  const first = compMatches().find((m) => m.sched_at), pfirst = pracMatches().find((m) => m.sched_at);
+  if (!sc.day) sc.day = first ? dayOf(first.sched_at) : todayStr();
+  if (!sc.pday) sc.pday = pfirst ? dayOf(pfirst.sched_at) : todayStr();
+  const stages = stagesInUse(), nT = teamsArr().length;
+  const prows = pracMatches().map((m) => `<tr><td><b>${m.code}</b></td><td>${m.sched_at ? hm(m.sched_at) : ""}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td></tr>`).join("");
+  return `<div class="h2"><h2>Schedule</h2><span>จัดเวลาแข่งและวันซ้อม เวลาพักไม่นับเป็นเวลาคิว พิมพ์หรือบันทึกเป็น PDF ได้</span></div>
+   <div class="card tools sched"><div class="tl"><b>ตารางแข่ง</b>
+     <div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+       <label>วันแข่ง<input type="date" data-sc="day" value="${sc.day}"></label><label>เวลาเริ่มคู่แรก<input type="time" data-sc="start" value="${sc.start}"></label>
+       ${stages.map((st) => `<label>${esc(stageLabel(st))} (นาทีต่อคู่)<input type="number" min="1" value="${minOf(st)}" data-scmin="${st}"></label>`).join("")}
+       <label>เรียกขึ้นสนามเองเมื่อถึงเวลา<select data-sc="auto"><option value="1" ${sc.auto ? "selected" : ""}>เปิด</option><option value="0" ${sc.auto ? "" : "selected"}>ปิด</option></select></label></div>
+     <div class="row"><button class="btn primary" data-act="autofill">จัดเวลาอัตโนมัติ</button><span class="muted">นาทีต่อคู่รวมเวลาเปลี่ยนคู่แล้ว เติมลงตารางด้านล่าง ตรวจแล้วกด Save schedule</span></div></div>
+     ${breaksHtml()}</div>
+   <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Round</th><th>Teams</th><th>Time</th><th>Auto call</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
      <td>${m.status === "done" ? `<span class="muted">${hm(m.sched_at)} จบแล้ว</span>` : `<input type="time" data-k="at" value="${hm(m.sched_at)}">`}</td>
      <td>${m.status === "done" ? "" : `<input type="checkbox" data-k="auto" ${m.auto_open ? "checked" : ""} aria-label="เปิดอัตโนมัติ ${m.code}">`}</td><td>${m.sched_at && m.status !== "done" ? `<button class="btn small" data-act="clearsc">ล้าง</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
-   <div class="btns"><button class="btn primary" data-act="savesc">Save schedule</button></div>`;
+   <div class="btns"><button class="btn primary" data-act="savesc">Save schedule</button><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
+
+   <div class="h2" style="margin-top:26px"><h2>วันซ้อม</h2><span>จับคู่ซ้อมแข่งจริง กรรมการใช้หน้าเดิม ผลไม่นับเข้าตารางคะแนนหรือสายแข่ง</span></div>
+   <div class="card tools sched"><div class="tl">
+     <div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+       <label>วันซ้อม<input type="date" data-sc="pday" value="${sc.pday}"></label><label>เวลาเริ่ม<input type="time" data-sc="pstart" value="${sc.pstart}"></label>
+       <label>ทีมละกี่คู่<input type="number" min="1" max="${Math.max(1, nT - 1)}" value="${sc.pgames}" data-sc="pgames"></label>
+       <label>Bo<select data-sc="pbo">${[1, 3, 5].map((n) => `<option value="${n}" ${+sc.pbo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>
+       <label>นาทีต่อคู่<input type="number" min="1" value="${sc.pmin}" data-sc="pmin"></label></div>
+     <div class="row"><span class="muted">${nT} ทีม ทีมละ ${sc.pgames} คู่ รวม ${(nT * sc.pgames) % 2 ? "ไม่ลงตัว (จำนวนทีม × คู่ ต้องเป็นเลขคู่)" : (nT * sc.pgames) / 2 + " คู่"}</span></div>
+     <div class="row"><button class="btn primary" data-act="pracgen">สุ่มคู่ซ้อมและจัดเวลา</button><button class="btn" data-act="pdfprac" ${prows ? "" : "disabled"}>พิมพ์ / PDF ตารางซ้อม</button><button class="btn danger" data-act="pracclear" ${prows ? "" : "disabled"}>ล้างการซ้อม</button></div></div></div>
+   ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Time</th><th>Teams</th><th>Bo</th><th>Status</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม</p>`}`;
 }
 function readSchedule() {
-  const day = $("sd")?.value || todayStr(), out = [];
+  const day = sc.day || todayStr(), out = [];
   document.querySelectorAll("tr[data-sc]").forEach((tr) => {
-    const code = tr.dataset.sc, m = match(code); if (m.status === "done") return;
+    const code = tr.dataset.sc, m = match(code); if (!m || m.status === "done") return;
     const t = tr.querySelector('[data-k="at"]').value, a = tr.querySelector('[data-k="auto"]').checked;
     out.push({ code, at: t ? new Date(day + "T" + t + ":00").toISOString() : null, auto: !!(t && a) });
   });
   return out;
 }
 function autofill() {
-  const day = $("sd").value || todayStr(), t0 = $("s0").value, iv = Math.max(1, +$("si").value || 12), nf = 1, auto = $("sa").value === "1";
-  if (!t0) return toast("ใส่เวลาเริ่มคู่แรกก่อน", true);
-  const base = new Date(day + "T" + t0 + ":00").getTime(); let i = 0;
-  document.querySelectorAll("tr[data-sc]").forEach((tr) => {
-    if (!["locked", "ready"].includes(match(tr.dataset.sc).status)) return;
-    const slot = Math.floor(i / nf), d = new Date(base + slot * iv * 60000); i++;
-    tr.querySelector('[data-k="at"]').value = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
-    tr.querySelector('[data-k="auto"]').checked = auto;
+  if (!sc.start) return toast("ใส่เวลาเริ่มคู่แรกก่อน", true);
+  const rows = [...document.querySelectorAll("tr[data-sc]")].filter((tr) => ["locked", "ready"].includes(match(tr.dataset.sc)?.status));
+  timeline(sc.day || todayStr(), sc.start, rows, (tr) => minOf(match(tr.dataset.sc).stage)).forEach(({ it, t }) => {
+    it.querySelector('[data-k="at"]').value = hhmm(t); it.querySelector('[data-k="auto"]').checked = !!sc.auto;
   });
-  toast("เติมแล้ว ตรวจสอบแล้วกดบันทึก");
+  toast("จัดเวลาแล้ว ตรวจแล้วกด Save schedule");
+}
+// Printable schedule in a new window; the browser print dialog saves it as PDF
+function printSchedule(title, list, day) {
+  const w = window.open("", "_blank"); if (!w) return toast("เบราว์เซอร์บล็อกหน้าต่างใหม่", true);
+  const at = (hm) => new Date(day + "T" + hm + ":00").getTime();
+  const rows = [], brs = sc.breaks.filter((x) => x.at && +x.min > 0).map((x) => ({ s: at(x.at), x })).sort((a, b) => a.s - b.s);
+  let bi = 0;
+  list.forEach((m) => {
+    const t = m.sched_at ? Date.parse(m.sched_at) : null;
+    while (t != null && bi < brs.length && brs[bi].s <= t) { rows.push(`<tr class="br"><td>${esc(brs[bi].x.at)}</td><td colspan="4">${esc(brs[bi].x.label || "พัก")} ${brs[bi].x.min} นาที</td></tr>`); bi++; }
+    rows.push(`<tr><td>${t != null ? hhmm(t) : "-"}</td><td><b>${esc(m.code)}</b></td><td>${esc(stageLabel(m.stage))}</td><td>${esc(sideName(m, "red"))} <span class="vs">พบ</span> ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td></tr>`);
+  });
+  w.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+    body{font-family:system-ui,sans-serif;margin:24px;color:#16191B}h1{font-size:20px;margin:0 0 4px}p{margin:0 0 14px;color:#5D6663}
+    table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #C9CFCC;padding:6px 8px;text-align:left}th{background:#F1F3F2}
+    tr.br td{background:#FFF4CC;font-weight:600}.vs{color:#5D6663}@page{size:A4;margin:12mm}</style></head><body>
+    <h1>${esc(event().name || "Alvik")} : ${esc(title)}</h1><p>${esc(day)}</p>
+    <table><thead><tr><th>เวลา</th><th>คู่</th><th>รอบ</th><th>ทีม</th><th>Bo</th></tr></thead><tbody>${rows.join("")}</tbody></table>
+    <script>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
 }
 
 // ---------- Standings tab ----------
@@ -215,7 +279,7 @@ function groupsView() {
   const n = groups().length || 1, cols = innerWidth < 760 ? 1 : n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4;
   return `<div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${groups().map((gr) => { const G = gr.grp;
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
-    return `<div><div class="h2"><h2>Group ${G}</h2><span>${stageLabel(gr.stage)}, top ${gr.adv} advance</span></div>
+    return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${stageLabel(gr.stage)}, top ${gr.adv} advance</span></div>
       <div class="tw"><table class="tbl"><thead><tr><th>#</th><th>Team</th><th class="num">W-L</th><th class="num">Games</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
         <td>${r.tied && i > 0 && rows[i - 1].tied && r.seed != null ? `<button class="btn small" data-act="tbup" data-g="${G}" data-s="${r.seed}">ขึ้น</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${tiedAny ? `<div class="warn">มีทีมเสมอกันทุกเกณฑ์ กดขึ้นเพื่อให้ทีมนั้นอยู่เหนือทีมข้างบน</div>` : ""}${tb ? `<div class="btns"><button class="btn small" data-act="tbclear" data-g="${G}">ล้างการตัดสินลำดับ</button></div>` : ""}</div>`;
@@ -432,7 +496,7 @@ function poolCheck(q) {
 }
 function poolFormat(q) {
   const n = Math.trunc(+q.teams), err = poolCheck(q);
-  const f = { teams: n, rounds: [], customGroups: [], customMatches: [], quick: { ...q, err } };
+  const f = { teams: n, rounds: [], customGroups: [], customMatches: [], quick: { ...q, err }, labels: { A: "Qualifying" } };
   if (err) return f;
   const pairs = poolPairs(n, +q.games); if (!pairs) { f.quick.err = "สุ่มคู่ไม่สำเร็จ ลองกดสุ่มใหม่"; return f; }
   f.customGroups.push({ grp: "A", stage: "r1", adv: +q.adv, srcs: [...Array(n).keys()].map((i) => "s" + (i + 1)) });
@@ -444,6 +508,7 @@ function poolFormat(q) {
   letters.forEach((L, gi) => {
     const srcs = places.filter((_, i) => i % G === gi);
     f.customGroups.push({ grp: L, stage: "r2", adv: +q.adv2, srcs });
+    f.labels[L] = G === 1 ? "Final group" : "QF" + (gi + 1);
     buildGroupMatches(L, "r2", srcs.map(parseSrcKey), +q.bo_group).forEach((m) => f.customMatches.push({ code: m.code, stage: "r2", grp: L, bo: +q.bo_group, red: srcKey(m.red_src), blue: srcKey(m.blue_src) }));
   });
   // Knockout from the second round : 4 teams cross (1st of one group meets 2nd of the other), 2 teams go straight to the final
@@ -536,15 +601,15 @@ function fmtCard(played) {
     <details class="fdet" ${fmtDetOpen ? "open" : ""}><summary>ตั้งค่าละเอียด : ขนาดแต่ละกลุ่ม หลายรอบกลุ่ม จัดคู่และสายเอง</summary>${topBar}${body}</details>
     <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button><button class="btn" data-act="fmtundo">Undo changes</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
 }
-function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) { el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void")); const n = document.querySelector(".fmtc"); if (n) fitBrackets(n); } }
+function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) { el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}))); const n = document.querySelector(".fmtc"); if (n) fitBrackets(n); } }
 function teamsView() {
-  const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void");
+  const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}));
   const r1 = groups().filter((g) => g.stage === "r1" && g.srcs?.every((x) => x && x.seed != null));
   const cols = r1.length ? r1 : [{ grp: "", srcs: t.map((x) => ({ seed: x.seed })) }];
   return `<div class="h2"><h2>Format</h2><span>เพิ่มหรือลดรอบกลุ่ม ปรับขนาดแต่ละกลุ่มไม่เท่ากันได้ แก้สายการแข่งได้ทุกรอบ หรือกำหนดแมตช์เองทั้งหมด</span></div>
    ${fmtCard(played)}
    <div class="h2" style="margin-top:20px"><h2>Teams</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง ใช้ Shuffle เพื่อจับสาย</span></div>
-   <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? "Group " + g.grp : "Teams (seed order)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="Team ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>Absent</label></div>`; }).join("")}</div>`).join("")}</div>
+   <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? esc(grpName(g.grp)) : "Teams (seed order)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="Team ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>Absent</label></div>`; }).join("")}</div>`).join("")}</div>
    <div class="btns"><button class="btn primary" data-act="saveteams">Save teams</button><button class="btn" data-act="shuffle">Shuffle</button></div>
    <div class="h2" style="margin-top:24px"><h2>Draw on Dashboard</h2><span>${draw ? "Dashboard อยู่ในโหมด Draw" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม Dashboard จะเผยชื่อทีมทีละทีม"}</span></div>
    <div class="btns"><button class="btn primary" data-act="drawstart">Start draw</button><button class="btn" data-act="tvauto">Back to Auto</button></div>`;
@@ -749,6 +814,25 @@ const H = {
     await act(() => adm("a2_adm_forfeit", { p_code: dlgCode, p_side: sd || null }), sd ? "บันทึกแพ้บายแล้ว" : "ยกเลิกแพ้บายแล้ว"); dlg.innerHTML = dlgHtml(dlgCode);
   },
   autofill() { autofill(); },
+  bradd() { sc.breaks.push({ at: "", min: 15, label: "" }); scSave(); formTab = ""; render(); },
+  brdel(b) { sc.breaks.splice(+b.dataset.i, 1); scSave(); formTab = ""; render(); },
+  pdfcomp() { printSchedule("ตารางแข่ง", compMatches().slice().sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no), sc.day || todayStr()); },
+  pdfprac() { printSchedule("ตารางวันซ้อม", pracMatches().slice().sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no), sc.pday || todayStr()); },
+  async pracgen() {
+    const n = teamsArr().length, k = +sc.pgames;
+    if ((n * k) % 2 || k < 1 || k > n - 1) return toast(`${n} ทีม ทีมละ ${k} คู่ ไม่ลงตัว ลองจำนวนคู่อื่น`, true);
+    const pairs = poolPairs(n, k); if (!pairs) return toast("สุ่มคู่ไม่สำเร็จ ลองอีกครั้ง", true);
+    const tl = timeline(sc.pday || todayStr(), sc.pstart, pairs, () => +sc.pmin || 10);
+    const items = tl.map(({ it, t }, i) => ({ code: "P" + (i + 1), red: it[0] + 1, blue: it[1] + 1, bo: +sc.pbo, at: new Date(t).toISOString() }));
+    if (pracMatches().length && !confirm("สร้างคู่ซ้อมใหม่แทนชุดเดิม")) return;
+    let r = await act(() => adm("a2_adm_practice", { p_matches: items, p_force: false }));
+    if (r === undefined && confirm("มีผลการซ้อมอยู่แล้ว ล้างผลซ้อมเดิมแล้วสร้างใหม่ไหม")) r = await act(() => adm("a2_adm_practice", { p_matches: items, p_force: true }));
+    if (r !== undefined) { toast(`สร้างคู่ซ้อม ${r} คู่แล้ว`); await loadAll(); formTab = ""; render(); }
+  },
+  async pracclear() {
+    if (!confirm("ล้างคู่ซ้อมและผลซ้อมทั้งหมด (ไม่กระทบการแข่งจริง)")) return;
+    if (await act(() => adm("a2_adm_practice", { p_matches: [], p_force: true }), "ล้างการซ้อมแล้ว") !== undefined) { await loadAll(); formTab = ""; render(); }
+  },
   clearsc(b) { const tr = b.closest("tr"); tr.querySelector('[data-k="at"]').value = ""; tr.querySelector('[data-k="auto"]').checked = false; },
   async savesc() { const items = readSchedule(); if (await act(() => adm("a2_adm_schedule", { p_items: items }), "บันทึกเวลาแล้ว") !== undefined) { formTab = ""; render(); } },
   async tbup(b) {
@@ -958,4 +1042,12 @@ document.addEventListener("change", async (e) => {
     if (!confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย (${Math.ceil(m.bo / 2)}-0)`)) { t.value = ""; return; }
     await act(() => adm("a2_adm_forfeit", { p_code: c, p_side: sd }), "บันทึกแพ้บายแล้ว");
   }
+});
+
+// Schedule settings inputs : saved per browser right away
+document.addEventListener("change", (e) => {
+  const t = e.target; if (!t.dataset) return;
+  if (t.dataset.sc && t.closest(".sched")) { const k = t.dataset.sc; sc[k] = k === "auto" ? t.value === "1" : ["pgames", "pbo", "pmin"].includes(k) ? +t.value : t.value; scSave(); if (k === "pgames") { formTab = ""; render(); } }
+  else if (t.dataset.scmin) { sc.mins[t.dataset.scmin] = +t.value; scSave(); }
+  else if (t.dataset.brk) { const x = sc.breaks[+t.dataset.brk]; if (x) { x[t.dataset.bk] = t.dataset.bk === "min" ? +t.value : t.value; scSave(); } }
 });

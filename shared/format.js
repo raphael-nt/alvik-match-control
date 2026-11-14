@@ -128,6 +128,7 @@ export function normalize(f0) {
           }))
         : null,
       quick: f0.quick && typeof f0.quick === "object" ? { ...f0.quick } : null,
+      labels: f0.labels && typeof f0.labels === "object" ? { ...f0.labels } : null,
     };
     reletter(f);
     if (!f.customMatches && f.rounds[0]?.type === "groups") {

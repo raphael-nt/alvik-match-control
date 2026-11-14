@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { grpName, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -57,7 +57,7 @@ function standingsView() {
   const n = gs.length, maxT = Math.max(2, ...gs.map((g) => (g.srcs || []).length));
   const cols = n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols);
   const cellH = (940 - (rows - 1) * 18) / rows, fs = Math.max(16, Math.min(34, Math.floor((cellH - 90) / (maxT + 1) / 1.45)));
-  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>Group ${g.grp}<span class="rnd">${stageLabel(g.stage)}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
+  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>${esc(grpName(g.grp))}<span class="rnd">${stageLabel(g.stage)}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
 }
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
@@ -68,7 +68,7 @@ function drawView() {
   const col = (title, seeds) => `<div class="dc"><h2>${title}</h2>${seeds.map((sd) => `<div class="slot"><small>${sd}</small>${t >= (sd - 1) * 1600 ? `<span class="nm">${esc(teamName(sd))}</span>` : `<span class="muted">...</span>`}</div>`).join("")}</div>`;
   const r1 = groups().filter((g) => g.srcs?.some((x) => x && x.seed != null));
   if (r1.length) {
-    return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${Math.min(4, r1.length)},1fr)">${r1.map((g) => col("Group " + g.grp, g.srcs.filter((x) => x && x.seed != null).map((x) => x.seed))).join("")}</div>`;
+    return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${Math.min(4, r1.length)},1fr)">${r1.map((g) => col(grpName(g.grp), g.srcs.filter((x) => x && x.seed != null).map((x) => x.seed))).join("")}</div>`;
   }
   const seeds = teamsArr().map((x) => x.seed), c = Math.min(4, Math.max(1, Math.ceil(seeds.length / 8))), per = Math.ceil(seeds.length / c);
   const cols = [...Array(c).keys()].map((i) => seeds.slice(i * per, (i + 1) * per)).filter((a) => a.length);

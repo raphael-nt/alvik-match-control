@@ -1,5 +1,5 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
-import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc } from "./common.js";
+import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
 
 // Data source : live store, or preview data from bracketHtml({ data: { groups, matches } }) before a format is applied
@@ -149,7 +149,7 @@ function chipHtml(m, clickable) {
 }
 function boxHtml(b, clickable, mByGrp) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
-  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : "Group " + b.g.grp;
+  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : grpName(b.g.grp);
   const stLbl = isM ? stageLabel(b.m.stage) : stageLabel(b.g.stage);
   const sub = isM ? `${stLbl && b.m.stage !== "final" && b.m.stage !== "third" ? stLbl + ", " : ""}Bo${b.m.bo}` : stLbl;
   const rh = rowsOf(b).map((r) => {

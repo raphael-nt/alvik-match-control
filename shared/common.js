@@ -79,7 +79,9 @@ export const gameNo = (code, g) => {
   return n;
 };
 export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
-export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} Group ${src.g}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
+// Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
+export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || "Group " + g; };
+export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
 export const tableOf = (grp) => {
   if (!_cTable || _stRef !== S.standings) {
