@@ -128,3 +128,4 @@ dialog::backdrop{background:#16191Bb0}
 td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-height:30px;padding:2px 6px;font-size:13px;width:auto}
 .tools .tl{display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--line)}.tools .tl:first-of-type{border-top:0}.tools .tl .muted{font-size:13px}
 .tools .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tools .row select,.tools .row input{flex:1;min-width:160px}
+.sched{margin-bottom:12px}.sched .gf{margin:6px 0}
