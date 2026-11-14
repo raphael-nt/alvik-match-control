@@ -75,9 +75,9 @@ function render(force) {
   const ev = event(); const en = $("evn"); if (en && en.textContent !== ev.name) en.textContent = ev.name || "Alvik";
   paintNet();
   if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); if (tab === "tv") paintLay(); } updateDlgBanner(); return; }
-  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
+  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req, m.bo, m.order_no]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
   if (k === lastKey) { updateDlgBanner(); return; }
-  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "tv") paintLay(); updateDlgBanner();
+  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "tv") paintLay(); if (tab === "queue") mountTools(); updateDlgBanner();
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
@@ -94,9 +94,52 @@ function clockBox(f) {
 }
 function homeView() {
   const rq = upNext().slice(0, 6).map((m) => `<div class="rq"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="muted">${m.sched_at ? fmtTime(m.sched_at) + (m.auto_open ? " auto" : "") : ""}</span><span></span><button class="btn small primary" data-act="open" data-c="${m.code}">Call</button></div>`).join("") || `<p class="muted">ยังไม่มีคู่ที่พร้อม</p>`;
-  return `<div class="home"><div class="card hbk">${bracketHtml({ clickable: true })}</div>
+  return `${alertsHtml()}<div class="home"><div class="card hbk">${bracketHtml({ clickable: true })}</div>
     <div class="hbot"><div class="card"><div class="h2"><h2>Up next</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div>${clockBox(field(1))}</div></div></div>`;
 }
+
+// ---------- Things waiting for the admin, shown on top of Overview and Queue ----------
+function alertsHtml() {
+  const out = [], f = field(1), onField = f && f.match_code ? match(f.match_code) : null, ev = event();
+  matches().filter((m) => m.absent_req).forEach((m) => out.push(`<div class="al warn">คู่ ${m.code} : กรรมการขอให้ฝั่ง ${m.absent_req.toUpperCase()} (${esc(sideName(m, m.absent_req))}) แพ้บาย
+    <button class="btn small danger" data-act="approve" data-c="${m.code}" data-s="${m.absent_req}">อนุมัติ</button><button class="btn small" data-act="reject" data-c="${m.code}">ไม่อนุมัติ</button></div>`));
+  const tied = [...new Set(S.standings.filter((r) => r.tied).map((r) => r.grp))];
+  if (tied.length) out.push(`<div class="al warn">กลุ่ม ${tied.join(", ")} มีทีมคะแนนเท่ากันทุกอย่าง ต้องจัดลำดับเองก่อนทีมจะเข้ารอบต่อ <button class="btn small" data-act="gotab" data-t="groups">ไปจัดลำดับ</button></div>`);
+  if (onField && onField.status !== "done" && !refOnline(f)) out.push(`<div class="al">เครื่องกรรมการไม่ได้ออนไลน์ ถ้าเครื่องเสียให้กด Transfer referee แล้วเปิดหน้ากรรมการในเครื่องใหม่ <button class="btn small" data-act="transfer">Transfer referee</button></div>`);
+  if (ev.notice_on && ev.notice) out.push(`<div class="al info">กำลังประกาศบนจอ : ${esc(ev.notice)} <button class="btn small" data-act="noticehide">ซ่อนประกาศ</button></div>`);
+  return out.length ? `<div class="alerts">${out.join("")}</div>` : "";
+}
+// A match can still change Bo while no game of it has started
+const boEditable = (m) => m.status !== "done" && !m.forfeit && !gamesOf(m.code).some((g) => g.status !== "void" && g.status !== "ready");
+function rowTools(x, f) {
+  const out = [];
+  if (x.status === "ready" && x.field_no == null) out.push(`<button class="btn small primary" data-act="open" data-c="${x.code}">Call</button>`);
+  if ((x.status === "ready" || x.status === "locked") && x.field_no == null) out.push(`<button class="btn small" data-act="postpone" data-c="${x.code}" title="ย้ายไปท้ายคิว">ไว้ทีหลัง</button>`);
+  if (boEditable(x)) out.push(`<select class="sm" data-bo-code="${x.code}" title="เปลี่ยน Bo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${x.bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select>`);
+  if (x.red_seed != null && x.blue_seed != null && x.status !== "done") out.push(`<select class="sm" data-ff-code="${x.code}" title="ทีมไม่มา"><option value="">ทีมไม่มา...</option><option value="red">${esc(sideName(x, "red"))} ไม่มา</option><option value="blue">${esc(sideName(x, "blue"))} ไม่มา</option></select>`);
+  if (x.forfeit) out.push(`<button class="btn small" data-act="ffundo" data-c="${x.code}">ยกเลิกแพ้บาย</button>`);
+  out.push(`<button class="btn small" data-act="edit" data-c="${x.code}">Open</button>`);
+  return out.join(" ");
+}
+// On-site tools card. Kept as one DOM node so typing is not lost when live data redraws the Queue tab
+let toolsEl = null;
+function toolsHtml() {
+  const ev = event(), t = teamsArr(), left = (sd) => matches().filter((m) => m.status !== "done" && (m.red_seed === sd || m.blue_seed === sd)).length;
+  return `<div class="card tools"><div class="h2"><h2>เครื่องมือหน้างาน</h2></div>
+    <div class="tl"><b>เปลี่ยน Bo คู่ที่ยังไม่เริ่มทั้งหมด</b><span class="muted">ใช้เมื่อเวลาไม่พอ คู่ที่เริ่มแข่งแล้วไม่เปลี่ยน</span>
+      <div class="row"><select id="boall">${[1, 3, 5, 7].map((n) => `<option value="${n}">Bo${n}</option>`).join("")}</select><button class="btn" data-act="boall">เปลี่ยนทั้งหมด</button></div></div>
+    <div class="tl"><b>ทีมถอนตัว หรือกลับมาแข่ง</b><span class="muted">ถอนตัว : คู่ที่เหลือของทีมนี้แพ้บายทั้งหมด กลับมาแข่ง : ยกเลิกแพ้บายของคู่ที่ยังไม่จบ</span>
+      <div class="row"><select id="wdteam">${t.map((x) => `<option value="${x.seed}">${esc(teamName(x.seed))}${x.absent ? " (ถอนตัวอยู่)" : ""} · เหลือ ${left(x.seed)} คู่</option>`).join("")}</select>
+      <button class="btn danger" data-act="withdraw">ถอนตัว</button><button class="btn" data-act="comeback">กลับมาแข่ง</button></div></div>
+    <div class="tl"><b>ประกาศบนจอ Dashboard</b><span class="muted">${ev.notice_on && ev.notice ? "ตอนนี้แสดงอยู่" : "ตอนนี้ไม่ได้แสดง"}</span>
+      <div class="row"><input id="ntext" maxlength="200" placeholder="เช่น พักเที่ยง กลับมาแข่ง 13:00" value="${esc(ev.notice || "")}"><button class="btn primary" data-act="noticeshow">แสดง</button><button class="btn" data-act="noticehide">ซ่อน</button></div></div></div>`;
+}
+function mountTools() {
+  const host = $("qtools"); if (!host) return;
+  if (!toolsEl) { toolsEl = document.createElement("div"); toolsEl.innerHTML = toolsHtml(); }
+  host.replaceWith(toolsEl);
+}
+const refreshTools = () => { if (toolsEl) toolsEl.innerHTML = toolsHtml(); };
 
 // ---------- Queue tab (single queue, single field) ----------
 function flowBtns(f) {
@@ -118,15 +161,14 @@ function queueView() {
     card = `<div class="card fc st-${m.status}"><div class="h2"><h2>On field  ${m.code}</h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><span>Referee ${refOnline(f) ? "online" : "offline"}</span></div>
       <div class="vs"><span>${stageLabel(m.stage)}${m.grp ? " Group " + m.grp : ""}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
       <div class="muted">${done ? "Match finished · ผู้ชนะ " + esc(teamName(m.winner_seed)) : (g ? "Game " + gameNo(m.code, g) + " of " + m.bo : "") + (g?.pattern ? " · Pattern " + g.pattern : " · ยังไม่เลือกแบบสนาม")}${!done && ["setup", "ready"].includes(f.phase) ? ` · Checklist ${["red_in", "blue_in", "stands"].filter((k) => c[k]).length}/3` : ""}</div>
-      ${m.absent_req ? `<div class="warn">กรรมการขอแพ้บายฝั่ง ${m.absent_req.toUpperCase()} (${esc(sideName(m, m.absent_req))}) <button class="btn small danger" data-act="approve" data-c="${m.code}" data-s="${m.absent_req}">Approve</button> <button class="btn small" data-act="reject" data-c="${m.code}">Reject</button></div>` : ""}
       <div class="t" data-clk>1:30.0</div><div class="muted" data-ph></div>
       <div class="btns">${done ? (nx.length ? `<button class="btn primary" data-act="open" data-c="${nx[0].code}">Call next match ${nx[0].code}</button>` : "") : flowBtns(f)}
         <button class="btn" data-act="edit" data-c="${m.code}">Event log</button><button class="btn" data-act="transfer">Transfer referee</button><button class="btn danger" data-act="close" data-c="${m.code}">Clear field</button></div>
       <p class="muted" style="margin:6px 0 0">ปุ่ม Start ของแอดมินข้าม Checklist ได้ ใช้เมื่อเครื่องกรรมการมีปัญหา</p></div>`;
   }
   const rows = matches().map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} vs ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " auto" : "") : ""}</td>
-    <td>${x.status === "ready" && x.field_no == null ? `<button class="btn small primary" data-act="open" data-c="${x.code}">Call</button>` : ""} <button class="btn small" data-act="edit" data-c="${x.code}">Open</button></td></tr>`).join("");
-  return `<div class="cols"><div class="stack">${card}</div><div><div class="h2"><h2>Order</h2><span>เรียกได้ทีละคู่ คู่บนสนามต้องจบหรือถูกเอาลงก่อน</span></div><div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Teams</th><th class="num">Score</th><th>Status</th><th>Time</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+    <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
+  return `${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>Order</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว เปลี่ยน Bo ได้จนกว่าคู่นั้นจะเริ่มแข่ง</span></div><div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Teams</th><th class="num">Score</th><th>Status</th><th>Time</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 // ---------- Schedule tab ----------
@@ -649,6 +691,29 @@ const H = {
   },
   async transfer() { if (!confirm("ปลดเครื่องกรรมการเดิม เครื่องที่เปิดหน้า Referee อยู่จะรับสิทธิ์แทนภายใน 10 วินาที")) return; await act(() => adm("a2_adm_ref_transfer", {}), "Referee released"); },
   async approve(b) { const m = match(b.dataset.c), sd = b.dataset.s; if (!confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย ${Math.ceil(m.bo / 2)}-0`)) return; await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: sd }), "Forfeit approved"); },
+  async postpone(b) { if (await act(() => adm("a2_adm_postpone", { p_code: b.dataset.c }), `ย้าย ${b.dataset.c} ไปท้ายคิวแล้ว`) !== undefined) { await loadAll(); redraw(); } },
+  async ffundo(b) { await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: null }), "ยกเลิกแพ้บายแล้ว"); },
+  async boall() {
+    const bo = +$("boall").value, n = matches().filter(boEditable).length;
+    if (!confirm(`เปลี่ยนเป็น Bo${bo} ทุกคู่ที่ยังไม่เริ่ม (${n} คู่)`)) return;
+    const r = await act(() => adm("a2_adm_bo", { p_codes: null, p_bo: bo }), "เปลี่ยน Bo แล้ว"); if (r !== undefined) { toast(`เปลี่ยน ${r} คู่`); await loadAll(); redraw(); }
+  },
+  async withdraw() {
+    const sd = +$("wdteam").value, n = matches().filter((m) => m.status !== "done" && (m.red_seed === sd || m.blue_seed === sd)).length;
+    if (!confirm(`${teamName(sd)} ถอนตัว\nคู่ที่เหลือ ${n} คู่จะให้คู่แข่งชนะบาย รวมถึงคู่ในรอบถัดไปถ้าทีมนี้ผ่านเข้าไป`)) return;
+    if (await act(() => adm("a2_adm_absent", { p_seed: sd, p_absent: true }), "บันทึกถอนตัวแล้ว") !== undefined) refreshTools();
+  },
+  async comeback() {
+    const sd = +$("wdteam").value;
+    if (!confirm(`${teamName(sd)} กลับมาแข่ง\nคู่ที่ยังไม่จบจะยกเลิกแพ้บายจากการถอนตัว คู่ที่จบไปแล้วไม่เปลี่ยน`)) return;
+    if (await act(() => adm("a2_adm_absent", { p_seed: sd, p_absent: false }), "กลับมาแข่งแล้ว") !== undefined) refreshTools();
+  },
+  async noticeshow() {
+    const v = ($("ntext")?.value || "").trim(); if (!v) return toast("พิมพ์ข้อความก่อน", true);
+    if (await act(() => adm("a2_adm_event", { p: { notice: v, notice_on: true } }), "แสดงประกาศแล้ว") !== undefined) { refreshTools(); redraw(); }
+  },
+  async noticehide() { if (await act(() => adm("a2_adm_event", { p: { notice_on: false } }), "ซ่อนประกาศแล้ว") !== undefined) { refreshTools(); redraw(); } },
+  gotab(b) { const t = document.querySelector(`[data-tab="${b.dataset.t}"]`); if (t) t.click(); },
   async reject(b) { await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: null }), "Request rejected"); },
   async mk(b) {
     const card = b.closest("[data-g]"), id = b.closest("[data-mid]").dataset.mid;
@@ -879,3 +944,18 @@ document.addEventListener("toggle", (e) => {
   if (e.target.classList.contains("fdet")) fmtDetOpen = e.target.open;
   if (e.target.classList.contains("fprev")) { fmtPrevOpen = e.target.open; if (e.target.open) fitBrackets(e.target); }
 }, true);
+
+// Queue row selects : change Bo of one match, or mark a team absent for one match
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+  if (t.dataset && t.dataset.boCode) {
+    const c = t.dataset.boCode, bo = +t.value;
+    if (!confirm(`คู่ ${c} เปลี่ยนเป็น Bo${bo}`)) { redraw(); return; }
+    if (await act(() => adm("a2_adm_bo", { p_codes: [c], p_bo: bo }), `${c} เป็น Bo${bo} แล้ว`) !== undefined) { await loadAll(); redraw(); }
+  }
+  if (t.dataset && t.dataset.ffCode && t.value) {
+    const c = t.dataset.ffCode, sd = t.value, m = match(c);
+    if (!confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย (${Math.ceil(m.bo / 2)}-0)`)) { t.value = ""; return; }
+    await act(() => adm("a2_adm_forfeit", { p_code: c, p_side: sd }), "บันทึกแพ้บายแล้ว");
+  }
+});
