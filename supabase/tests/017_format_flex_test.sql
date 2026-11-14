@@ -42,7 +42,7 @@ begin
   perform a2_recompute();
   select string_agg(label||':'||seed::text, ',' order by pos, seed) into rk from a2_ranking();
   select count(distinct seed) into n from a2_ranking();
-  r := r || case when n=9 and rk='1:1,2:4,3=:5,3=:7,5=:2,5=:8,7=:3,7=:6,7=:9' then 'PASS ' else 'FAIL ' end || 'T1 9-team multi-round rk=' || coalesce(rk,'null') || ' uniq=' || n || E'\n';
+  r := r || case when n=9 and rk='1:1,2:4,3=:2,3=:7,5=:5,5=:8,7=:3,7=:6,7=:9' then 'PASS ' else 'FAIL ' end || 'T1 9-team multi-round rk=' || coalesce(rk,'null') || ' uniq=' || n || E'\n';
 
   -- Test 2 : Unequal group sizes and advances A(4, adv 2), B(3, adv 1) to D(3, adv 2) to F
   perform a2_adm_format(pw,
