@@ -469,6 +469,14 @@ function quickHtml(f, built) {
   ${byes.length ? `<p class="muted" style="margin:6px 0 0">ได้บายข้ามรอบแรก : ${byes.map((k) => esc(slotLabel(k))).join(", ")}</p>` : ""}`;
 }
 
+// Preview of the bracket this format would create, drawn from the built format before it is applied
+let fmtPrevOpen = true;
+function fmtPreviewHtml(f) {
+  let html = "";
+  try { if (!validateFormat(f).length) { const b = buildFormat(f); if (b.matches.length) html = bracketHtml({ data: { groups: b.groups, matches: b.matches } }); } } catch (e) { html = ""; }
+  return `<details class="fprev" ${fmtPrevOpen ? "open" : ""}><summary>ตัวอย่างตารางแข่ง</summary>${html || `<p class="muted">แก้รูปแบบให้ถูกต้องก่อน จึงจะแสดงตัวอย่างได้</p>`}</details>`;
+}
+
 // The whole format card; redrawn after every change
 function fmtCard(played) {
   const f = fmtEdit(), isCustom = Array.isArray(f.customMatches), ko = koOf(f), gRounds = f.rounds.filter((r) => r.type === "groups");
@@ -482,10 +490,11 @@ function fmtCard(played) {
   const built = isCustom ? null : buildFormat(f);
   const body = isCustom ? customFormatHtml(f) : f.rounds.map((r, ri) => (r.type === "groups" ? groupRoundHtml(f, r, ri) : koRoundHtml(f, r, built))).join("");
   return `<div class="card fmtc">${quickHtml(f, built)}<div id="fsum">${fmtSummary(f, built)}</div>
+    ${fmtPreviewHtml(f)}
     <details class="fdet" ${fmtDetOpen ? "open" : ""}><summary>ตั้งค่าละเอียด : ขนาดแต่ละกลุ่ม หลายรอบกลุ่ม จัดคู่และสายเอง</summary>${topBar}${body}</details>
     <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button><button class="btn" data-act="fmtundo">Undo changes</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
 }
-function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void")); }
+function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) { el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void")); const n = document.querySelector(".fmtc"); if (n) fitBrackets(n); } }
 function teamsView() {
   const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void");
   const r1 = groups().filter((g) => g.stage === "r1" && g.srcs?.every((x) => x && x.seed != null));
@@ -586,6 +595,7 @@ async function loadDocs() {
   try { el.innerHTML = docRows(await listDocs({ p_pw: pw }), true); } catch (e) { el.innerHTML = `<p class="warn">${esc(e.message)}</p>`; }
 }
 function afterForm() {
+  const fc = document.querySelector(".fmtc"); if (fc) fitBrackets(fc);
   if (formTab === "settings") loadDocs();
   document.querySelectorAll("[data-qr]").forEach((d) => { try { const q = window.qrcode(0, "M"); q.addData(d.dataset.qr); q.make(); d.innerHTML = q.createSvgTag({ scalable: true, margin: 2 }); d.firstChild.style.cssText = "width:110px;height:110px"; } catch (e) {} });
 }
@@ -864,4 +874,8 @@ document.addEventListener("click", (e) => { if (e.target.closest('[data-tab="log
 boot();
 
 // Remember whether the detailed format editor is open across redraws
-document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("fdet")) fmtDetOpen = e.target.open; }, true);
+document.addEventListener("toggle", (e) => {
+  if (!e.target.classList) return;
+  if (e.target.classList.contains("fdet")) fmtDetOpen = e.target.open;
+  if (e.target.classList.contains("fprev")) { fmtPrevOpen = e.target.open; if (e.target.open) fitBrackets(e.target); }
+}, true);
