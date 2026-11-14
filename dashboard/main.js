@@ -119,11 +119,16 @@ raf(() => {
   if (cmTxt !== _cm) { _cm = cmTxt; $("cm").textContent = cmTxt; }
   const cdHtml = ck.phase === "countdown" ? `<div class="cd">${ck.count}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
   if (cdHtml !== _cd) { _cd = cdHtml; $("cd").innerHTML = cdHtml; }
-  if (ck.phase === "countdown" && sec !== ls) snd(880, 120);
-  if (ck.phase === "game" && lp === "countdown") snd(1320, 700);
+  if (ck.phase === "countdown" && sec !== ls) { snd(880, 160); say(String(sec)); }
+  if (ck.phase === "game" && lp === "countdown") { snd(1320, 700); say("Go"); }
   if (ck.phase === "game" && sec <= 5 && sec > 0 && sec !== ls) snd(880, 90);
   if ((ck.phase === "over" && lp === "game") || (ck.phase === "stopped" && lp === "game")) snd(440, 900);
   lp = ck.phase; ls = sec;
+  // Knockout : Mission complete stops the clock, show it once per game
+  if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id) {
+    koShown = g.id;
+    if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: sd, title: "KNOCKOUT!", name: sd === "both" ? "RED + BLUE" : sideName(m, sd), sub: `Mission complete ${fmtMs1(f.stop_ms)}` }); }
+  }
   if (m) {
     const gs = gamesOf(m.code), bnEl = $("bn");
     if (gs !== _bnGs || m.code !== _bnMc) {
@@ -135,13 +140,16 @@ raf(() => {
         if (ts > bestTs) { bestTs = ts; d = x; }
       }
       if (d && d.id + d.version !== lastDone) {
-        if (lastDone !== null && Date.now() - bestTs < 8000) bnUntil = Date.now() + 8000;
+        const fresh = Date.now() - LOAD_T > 4000 && Date.now() - bestTs < 8000;
         lastDone = d.id + d.version;
-        bnEl.dataset.t = d.status === "replay" ? "Tie, replay with same pattern" : `${d.winner.toUpperCase()} wins Game ${gameNo(m.code, d)} (${RULE_EN[d.method] || ""})`;
+        if (fresh) {
+          if (d.status === "replay") popup({ kind: "tie", title: "TIE", name: "Replay", sub: "แข่งใหม่ แบบสนามเดิม" });
+          else if (m.status === "done" && m.winner_seed != null) popup({ kind: "match", side: d.winner, title: "WINNER!", name: teamName(m.winner_seed), sub: `ชนะคู่ ${m.code} ${m.red_wins}-${m.blue_wins}` });
+          else popup({ kind: "game", side: d.winner, title: `${d.winner.toUpperCase()} WINS`, name: sideName(m, d.winner), sub: `Game ${gameNo(m.code, d)} · ${RULE_EN[d.method] || ""} · ${m.red_wins}-${m.blue_wins}` });
+        }
       }
     }
-    const bnHtml = Date.now() < bnUntil ? `<div class="banner8">${esc(bnEl.dataset.t)}</div>` : "";
-    if (bnHtml !== _bn) { _bn = bnHtml; bnEl.innerHTML = bnHtml; }
+
   }
 });
 render();
@@ -155,3 +163,34 @@ if (fsx && fsSupported()) {
   fsx.onclick = async () => { try { await toggleFs(); } catch (e) {} if (!sound) { sound = true; beep(660, 80); $("fs")?.remove(); } show(); };
   document.addEventListener("fullscreenchange", () => { fsx.title = isFs() ? "Exit full screen" : "Full screen"; });
 } else if (fsx) fsx.remove();
+
+// ---------- Voice countdown and big centre popup ----------
+let koShown = null;
+const LOAD_T = Date.now();   // popups only for things that happen after the page has loaded
+// Spoken countdown (English numbers read clearly on most systems). Needs the sound tap like the beeps
+function say(t) {
+  if (!sound || !window.speechSynthesis) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = "en-US"; u.rate = 1.1; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+}
+// Popup over the whole screen for about 6 seconds, with a burst of confetti and a short fanfare
+function popup({ kind, side, title, name, sub }) {
+  // Own layer above the screen, scaled like the stage, so screen redraws do not remove it
+  const stage = $("stage"); if (!stage) return;
+  let st = $("fxl"); if (!st) { st = document.createElement("div"); st.id = "fxl"; document.body.append(st); }
+  st.style.transform = stage.style.transform;
+  st.querySelector(".pop8")?.remove();
+  const col = side === "red" ? "#CF3A2E" : side === "blue" ? "#2457C5" : "#F2B705";
+  const n = kind === "tie" ? 0 : kind === "match" ? 160 : 90, bits = [];
+  for (let i = 0; i < n; i++) {
+    const c = ["#F2B705", "#ffffff", col, "#00878F", "#E07A1F"][i % 5], x = Math.random() * 1920, dx = (Math.random() - 0.5) * 600, d = 1.6 + Math.random() * 2.2, r = Math.random() * 720;
+    bits.push(`<i style="left:${x}px;background:${c};--dx:${dx}px;--r:${r}deg;animation-duration:${d}s;animation-delay:${Math.random() * 0.6}s"></i>`);
+  }
+  const el = document.createElement("div");
+  el.className = "pop8 " + kind; el.style.setProperty("--c", col);
+  el.innerHTML = `<div class="rays"></div><div class="conf">${bits.join("")}</div><div class="card8"><div class="t8">${esc(title)}</div><div class="n8">${esc(name || "")}</div><div class="s8">${esc(sub || "")}</div></div>`;
+  st.append(el);
+  if (kind === "ko" || kind === "match") { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => snd(f, i === 3 ? 600 : 160), i * 170)); say(kind === "ko" ? "Knockout!" : "Winner!"); }
+  else if (kind === "game") { snd(784, 200); setTimeout(() => snd(1047, 400), 220); }
+  else snd(440, 500);
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 500); }, kind === "match" ? 7000 : 5500);
+}
