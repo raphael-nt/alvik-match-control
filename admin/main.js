@@ -176,11 +176,13 @@ const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + St
 const hm = (iso) => iso ? fmtTime(iso) : "";
 // Schedule settings are kept per browser so the admin does not retype them
 const SC_DEF = { day: "", start: "09:00", auto: true, mins: {}, breaks: [{ at: "12:00", min: 60, label: "พักเที่ยง" }],
-  pday: "", pstart: "09:00", pmin: 10, pgames: 2, pbo: 1 };
+  pday: "", pstart: "09:00", pmin: 10, pgames: 2, pbo: 1, pabsent: [] };
 let sc = (() => { try { return { ...SC_DEF, ...JSON.parse(localStorage.getItem("a2sched") || "{}") }; } catch (e) { return { ...SC_DEF }; } })();
 const scSave = () => { try { localStorage.setItem("a2sched", JSON.stringify(sc)); } catch (e) {} };
 const DEF_MIN = { r1: 12, r2: 12, r3: 12, r4: 12, practice: 10, r64: 15, r32: 15, r16: 15, qf: 15, sf: 15, third: 15, final: 20 };
 const isPractice = (m) => m.stage === "practice";
+// Teams ticked as present for the practice day (kept per browser)
+const practiceTeams = () => teamsArr().map((t) => t.seed).filter((sd) => !(sc.pabsent || []).includes(sd));
 const compMatches = () => matches().filter((m) => !isPractice(m));
 const pracMatches = () => matches().filter(isPractice);
 const dayOf = (iso) => { const d = new Date(iso); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
@@ -210,7 +212,7 @@ function scheduleView() {
   const first = compMatches().find((m) => m.sched_at), pfirst = pracMatches().find((m) => m.sched_at);
   if (!sc.day) sc.day = first ? dayOf(first.sched_at) : todayStr();
   if (!sc.pday) sc.pday = pfirst ? dayOf(pfirst.sched_at) : todayStr();
-  const stages = stagesInUse(), nT = teamsArr().length;
+  const stages = stagesInUse(), present = practiceTeams(), nT = present.length;
   const prows = pracMatches().map((m) => `<tr><td><b>${m.code}</b></td><td>${m.sched_at ? hm(m.sched_at) : ""}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td></tr>`).join("");
   return `<div class="h2"><h2>Schedule</h2><span>จัดเวลาแข่งและวันซ้อม เวลาพักไม่นับเป็นเวลาคิว พิมพ์หรือบันทึกเป็น PDF ได้</span></div>
    <div class="card tools sched"><div class="tl"><b>ตารางแข่ง</b>
@@ -233,6 +235,8 @@ function scheduleView() {
        <label>ทีมละกี่คู่<input type="number" min="1" max="${Math.max(1, nT - 1)}" value="${sc.pgames}" data-sc="pgames"></label>
        <label>Bo<select data-sc="pbo">${[1, 3, 5].map((n) => `<option value="${n}" ${+sc.pbo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>
        <label>นาทีต่อคู่<input type="number" min="1" value="${sc.pmin}" data-sc="pmin"></label></div>
+     <div class="tl"><b>ทีมที่มาซ้อม</b><span class="muted">เอาติ๊กออกถ้าทีมไม่มา จะจับคู่เฉพาะทีมที่มา (ไม่กระทบการแข่งจริง)</span>
+       <div class="pteams">${teamsArr().map((t) => `<label class="chk2"><input type="checkbox" data-pteam="${t.seed}" ${(sc.pabsent || []).includes(t.seed) ? "" : "checked"}>${esc(teamName(t.seed))}</label>`).join("")}</div></div>
      <div class="row"><span class="muted">${nT} ทีม ทีมละ ${sc.pgames} คู่ รวม ${(nT * sc.pgames) % 2 ? "ไม่ลงตัว (จำนวนทีม × คู่ ต้องเป็นเลขคู่)" : (nT * sc.pgames) / 2 + " คู่"}</span></div>
      <div class="row"><button class="btn primary" data-act="pracgen">สุ่มคู่ซ้อมและจัดเวลา</button><button class="btn" data-act="pdfprac" ${prows ? "" : "disabled"}>พิมพ์ / PDF ตารางซ้อม</button><button class="btn danger" data-act="pracclear" ${prows ? "" : "disabled"}>ล้างการซ้อม</button></div></div></div>
    ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Time</th><th>Teams</th><th>Bo</th><th>Status</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม</p>`}`;
@@ -831,11 +835,12 @@ const H = {
   },
   pdfprac() { printSchedule("ตารางวันซ้อม", pracMatches().slice().sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no), sc.pday || todayStr()); },
   async pracgen() {
-    const n = teamsArr().length, k = +sc.pgames;
+    const seeds = practiceTeams(), n = seeds.length, k = +sc.pgames;
+    if (n < 2) return toast("ต้องมีทีมมาซ้อมอย่างน้อย 2 ทีม", true);
     if ((n * k) % 2 || k < 1 || k > n - 1) return toast(`${n} ทีม ทีมละ ${k} คู่ ไม่ลงตัว ลองจำนวนคู่อื่น`, true);
     const pairs = poolPairs(n, k); if (!pairs) return toast("สุ่มคู่ไม่สำเร็จ ลองอีกครั้ง", true);
     const tl = timeline(sc.pday || todayStr(), sc.pstart, pairs, () => +sc.pmin || 10);
-    const items = tl.map(({ it, t }, i) => ({ code: "P" + (i + 1), red: it[0] + 1, blue: it[1] + 1, bo: +sc.pbo, at: new Date(t).toISOString() }));
+    const items = tl.map(({ it, t }, i) => ({ code: "P" + (i + 1), red: seeds[it[0]], blue: seeds[it[1]], bo: +sc.pbo, at: new Date(t).toISOString() }));
     if (pracMatches().length && !confirm("สร้างคู่ซ้อมใหม่แทนชุดเดิม")) return;
     let r = await act(() => adm("a2_adm_practice", { p_matches: items, p_force: false }));
     if (r === undefined && confirm("มีผลการซ้อมอยู่แล้ว ล้างผลซ้อมเดิมแล้วสร้างใหม่ไหม")) r = await act(() => adm("a2_adm_practice", { p_matches: items, p_force: true }));
@@ -1060,6 +1065,7 @@ document.addEventListener("change", async (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target; if (!t.dataset) return;
   if (t.dataset.sc && t.closest(".sched")) { const k = t.dataset.sc; sc[k] = k === "auto" ? t.value === "1" : ["pgames", "pbo", "pmin"].includes(k) ? +t.value : t.value; scSave(); if (k === "pgames") { formTab = ""; render(); } }
+  else if (t.dataset.pteam) { const sd = +t.dataset.pteam, a = new Set(sc.pabsent || []); if (t.checked) a.delete(sd); else a.add(sd); sc.pabsent = [...a]; scSave(); formTab = ""; render(); }
   else if (t.dataset.scmin) { sc.mins[t.dataset.scmin] = +t.value; scSave(); }
   else if (t.dataset.brk) { const x = sc.breaks[+t.dataset.brk]; if (x) { x[t.dataset.bk] = t.dataset.bk === "min" ? +t.value : t.value; scSave(); } }
 });
