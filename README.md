@@ -2,8 +2,6 @@
 
 Match control for the Arduino Alvik Smart Logistics Challenge (9 teams). Three web pages share live data through Supabase Realtime. One field, one match at a time, one central clock.
 
-Live at https://raphael-nt.github.io/alvik-match-control/
-
 | Page | Path | Used by |
 |---|---|---|
 | Admin | `/admin/` | Organizer. Calls matches, sets the schedule, edits the event log, manages teams |
