@@ -58,8 +58,8 @@ async function boot() {
 
 // ---------- Shell ----------
 function shell() {
-  app.innerHTML = `<div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">Sign out</button></div>
-    <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">${t}</button>`).join("")}</nav><div class="main" id="mn"></div>`;
+  app.innerHTML = `<div class="hdr"><div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">Sign out</button></div>
+    <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">${t}</button>`).join("")}</nav></div><div class="main" id="mn"></div>`;
   $("lo").onclick = () => logout(false);
   const fb = $("fsb"); if (fb) fb.onclick = () => toggleFs()?.catch?.(() => {});
   app.querySelector(".tabs").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (!b) return; tab = b.dataset.tab; lstore("a2tab", tab); app.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b)); lastKey = ""; formTab = ""; render(true); };
