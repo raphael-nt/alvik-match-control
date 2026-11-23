@@ -13,9 +13,9 @@ $("fs").onclick = async () => { try { await document.documentElement.requestFull
 const snd = (f, ms) => sound && beep(f, ms);
 
 // Header on every screen; an announcement from Admin shows as a bar over the top of the screen
-const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
+const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}${fsSupported() ? `<button class="fsh" data-fsh aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
 const upNext = (n = 3) => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no).slice(0, n);
-const upNextHtml = () => `<div class="upn"><h3>Up next</h3>${upNext().map((m) => `<div><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span>${m.sched_at ? fmtTime(m.sched_at) : ""}</span></div>`).join("") || "<div>-</div>"}</div>`;
+const upNextHtml = () => `<div class="upn"><h3>Up next</h3>${upNext().map((m) => `<div><b>${m.code}</b><span>${esc(sideName(m, "red"))}<em> vs ${esc(sideName(m, "blue"))}</em></span><span>${m.sched_at ? fmtTime(m.sched_at) : ""}</span></div>`).join("") || "<div>-</div>"}</div>`;
 
 const finalMatch = () => match("F") || matches().find((m) => m.stage === "final");
 const allMatchesDone = () => { const ms = matches(); return ms.length > 0 && ms.every((m) => m.status === "done"); };
@@ -154,15 +154,18 @@ raf(() => {
 });
 render();
 
-// Corner fullscreen button: appears on mouse move or touch, hides again after 3 seconds
-const fsx = $("fsx");
-if (fsx && fsSupported()) {
-  fsx.innerHTML = FS_ICON; let hideT = 0;
-  const show = () => { fsx.classList.add("on"); document.body.classList.add("cur"); clearTimeout(hideT); hideT = setTimeout(() => { fsx.classList.remove("on"); document.body.classList.remove("cur"); }, 3000); };
+// Fullscreen button in the header: appears on mouse move or touch, hides again after 3 seconds
+if (fsSupported()) {
+  let hideT = 0;
+  const show = () => { document.body.classList.add("cur"); clearTimeout(hideT); hideT = setTimeout(() => document.body.classList.remove("cur"), 3000); };
   ["mousemove", "touchstart"].forEach((ev) => addEventListener(ev, show, { passive: true }));
-  fsx.onclick = async () => { try { await toggleFs(); } catch (e) {} if (!sound) { sound = true; beep(660, 80); $("fs")?.remove(); } show(); };
-  document.addEventListener("fullscreenchange", () => { fsx.title = isFs() ? "Exit full screen" : "Full screen"; });
-} else if (fsx) fsx.remove();
+  document.addEventListener("click", async (e) => {
+    if (!e.target.closest("[data-fsh]")) return;
+    try { await toggleFs(); } catch (er) {}
+    if (!sound) { sound = true; beep(660, 80); $("fs")?.remove(); }
+    show();
+  });
+}
 
 // ---------- Voice countdown and big centre popup ----------
 let koShown = null;
