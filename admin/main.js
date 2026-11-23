@@ -498,11 +498,28 @@ function poolPairs(n, k) {
     while (left.length) {
       left.sort((x, y) => (last.has(x[0]) + last.has(x[1])) - (last.has(y[0]) + last.has(y[1])) || (plays[x[0]] + plays[x[1]]) - (plays[y[0]] + plays[y[1]]));
       const [a, b] = left.shift(); plays[a]++; plays[b]++; last.clear(); last.add(a); last.add(b);
-      order.push(order.length % 2 ? [b, a] : [a, b]);
+      order.push([a, b]);
     }
-    return order;
+    return balanceSides(order, n);
   }
   return null;
+}
+// Choose red and blue so every team plays both sides as evenly as possible.
+// The pairs form trails : walking them and giving the team we come from red makes red and blue equal
+// for every team when each plays an even number of matches, and differ by one when it is odd.
+function balanceSides(pairs, n) {
+  const adj = Array.from({ length: n }, () => []), used = pairs.map(() => false), out = pairs.map((p) => p.slice());
+  pairs.forEach(([a, b], i) => { adj[a].push(i); adj[b].push(i); });
+  const starts = [...Array(n).keys()].sort((x, y) => (adj[y].length % 2) - (adj[x].length % 2));   // odd degree first
+  for (const s of starts) {
+    let v = s;
+    for (;;) {
+      const i = adj[v].find((e) => !used[e]); if (i === undefined) break;
+      used[i] = true; const [a, b] = pairs[i], w = a === v ? b : a;
+      out[i] = [v, w]; v = w;
+    }
+  }
+  return out;
 }
 function poolCheck(q) {
   const n = +q.teams, k = +q.games, A = +q.adv, G = +q.groups2, a2 = +q.adv2;
