@@ -132,21 +132,24 @@ body.cur,body.cur *{cursor:default}
 /* Announcement bar from Admin > Queue > tools */
 .notice{position:absolute;left:40px;right:40px;top:104px;z-index:6;background:var(--tape);color:#16191B;border-radius:12px;padding:14px 24px;font-size:40px;font-weight:700;text-align:center;box-shadow:0 6px 24px #0008}
 /* Big centre popup : Knockout, game and match winners */
-.pop8{position:absolute;inset:0;z-index:8;display:grid;place-items:center;background:#0c0f10cc;overflow:hidden;animation:p8in .35s ease-out}
-.pop8.out{animation:p8out .5s ease-in forwards}
-.pop8 .rays{position:absolute;left:50%;top:50%;width:2600px;height:2600px;margin:-1300px 0 0 -1300px;background:repeating-conic-gradient(from 0deg,var(--c) 0deg 8deg,transparent 8deg 22deg);opacity:.28;animation:p8spin 9s linear infinite}
-.pop8 .card8{position:relative;text-align:center;padding:50px 90px;border-radius:36px;background:#14181Aee;border:10px solid var(--c);box-shadow:0 0 120px var(--c);animation:p8pop .7s cubic-bezier(.2,1.6,.4,1)}
-.pop8 .t8{font-size:190px;font-weight:900;line-height:1;color:var(--c);letter-spacing:.02em;text-shadow:0 8px 0 #0008}
-.pop8.ko .t8{font-size:220px;color:#F2B705;animation:p8shake .5s .7s 2}
-.pop8 .n8{font-size:96px;font-weight:800;color:#fff;margin-top:18px}
-.pop8 .s8{font-size:44px;color:#c9d1cf;margin-top:12px}
-.pop8 .conf i{position:absolute;top:-40px;width:22px;height:34px;border-radius:4px;animation-name:p8fall;animation-timing-function:cubic-bezier(.3,.6,.6,1);animation-fill-mode:forwards}
-@keyframes p8in{from{opacity:0}to{opacity:1}}@keyframes p8out{to{opacity:0;transform:scale(1.05)}}
-@keyframes p8pop{0%{transform:scale(.2) rotate(-6deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
-@keyframes p8spin{to{transform:rotate(360deg)}}
-@keyframes p8shake{25%{transform:translateX(-14px) rotate(-2deg)}75%{transform:translateX(14px) rotate(2deg)}}
-@keyframes p8fall{to{transform:translate(var(--dx),1200px) rotate(var(--r))}}
-@media (prefers-reduced-motion:reduce){.pop8 .rays,.pop8 .conf{display:none}}
+/* Result plate : dim screen, one centred card with an event header and a side colour band */
+.pop8{position:absolute;inset:0;z-index:8;display:grid;place-items:center;background:#0c0f10e0;animation:p8in .3s ease-out;--c:var(--tape);--cs:var(--tape-soft)}
+.pop8.out{animation:p8out .45s ease-in forwards}
+.pop8.side-r{--c:var(--red);--cs:var(--red-soft)}.pop8.side-b{--c:var(--blue);--cs:var(--blue-soft)}
+.pop8 .card8{width:1240px;background:var(--panel);border-radius:18px;overflow:hidden;border-top:18px solid var(--c);box-shadow:0 30px 80px #000a;animation:p8up .45s cubic-bezier(.2,.8,.3,1)}
+.pop8 .h8{display:flex;align-items:center;gap:20px;padding:22px 40px;border-bottom:2px solid var(--line);font-size:28px;color:var(--muted)}
+.pop8 .h8 img{height:44px}.pop8 .h8 span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pop8 .h8 b{color:var(--ink);font-weight:600}
+.pop8 .b8{display:grid;justify-items:center;gap:18px;padding:56px 60px 60px;text-align:center}
+.pop8 .l8{font-size:64px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--tape)}
+.pop8.game .l8{color:var(--ink)}.pop8.tie .l8{color:var(--muted)}
+.pop8 .sd8{font-size:28px;font-weight:700;letter-spacing:.12em;padding:6px 22px;border-radius:99px;background:var(--cs);color:var(--ink);border:2px solid var(--c)}
+.pop8 .n8{font-size:112px;font-weight:800;line-height:1.05;color:#fff;max-width:100%;overflow-wrap:anywhere}
+.pop8 .s8{font-size:36px;color:var(--muted)}
+.pop8 .sc8{display:flex;align-items:center;gap:28px;font-size:96px;font-weight:800;margin-top:6px}.pop8 .sc8 i{font-style:normal;color:var(--muted)}
+.pop8 .sc8 .c-r{color:#ff7a6e}.pop8 .sc8 .c-b{color:#7ea2ff}
+@keyframes p8in{from{opacity:0}to{opacity:1}}@keyframes p8out{to{opacity:0}}
+@keyframes p8up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.pop8,.pop8 .card8{animation:none}}
 #fxl{position:fixed;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;pointer-events:none;z-index:20}
 /* Live draw : first round matches on the left, numbered team list on the right */
 .dlive{flex:1;display:grid;grid-template-columns:1fr 420px;gap:28px;min-height:0}
@@ -167,3 +170,25 @@ body.cur,body.cur *{cursor:default}
 .dnew{animation:dnew 2.4s ease-out}
 .dnew span{animation:pop .5s ease-out}
 @keyframes dnew{0%,35%{box-shadow:0 0 0 6px var(--tape);background-color:var(--tape-soft)}100%{box-shadow:0 0 0 0 transparent}}
+/* Game pills : one per game, side colour for the winner */
+.gpl{display:inline-grid;place-items:center;min-width:1.9em;padding:0 .35em;height:1.35em;border-radius:6px;font-style:normal;font-size:.8em;font-weight:700;color:#fff;background:var(--line)}
+.gpl.r{background:var(--red)}.gpl.b{background:var(--blue)}.gpl.t{background:#5b6461}.gpl.now{background:none;box-shadow:inset 0 0 0 2px var(--tape);color:var(--tape)}
+.lh-p{display:flex;gap:8px;align-items:center}
+/* Round view : every match of one round, red and blue sides, score and game pills */
+.rv{flex:1;display:grid;align-content:start;gap:14px;background:var(--panel);border-radius:10px;padding:24px 32px;min-height:0}
+.rv h2{font-size:44px;display:flex;align-items:baseline;gap:20px}.rv h2 span{font-size:26px;color:var(--muted);font-weight:500}
+.rv-rows{display:grid;gap:12px}
+.rv-g{font-size:28px;font-weight:700;color:var(--tape);padding-top:6px}
+.rv-r{display:grid;grid-template-columns:100px 1fr 220px 1fr 150px;gap:14px;align-items:center;height:var(--rh)}
+.rv-r>b{font-size:30px;color:var(--muted)}
+.rv-r>em{font-style:normal;font-size:26px;color:var(--muted);text-align:right}.rv-r>em.on{color:var(--tape);font-weight:700}
+.rv-s{height:100%;display:flex;align-items:center;padding:0 22px;border-radius:10px;font-size:36px;font-weight:600;min-width:0;background:var(--cs);border-left:10px solid var(--c)}
+.rv-s.side-b{border-left:0;border-right:10px solid var(--c);justify-content:flex-end}
+.rv-s span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-r.done .rv-s:not(.win){opacity:.55}
+.rv-s.win{box-shadow:inset 0 0 0 3px var(--tape)}
+.rv-m{display:grid;justify-items:center;gap:6px}
+.rv-sc{font-size:40px;font-weight:800;color:var(--muted)}.rv-sc .r{color:#ff7a6e}.rv-sc .b{color:#7ea2ff}
+.rv-p{display:flex;gap:6px;font-size:24px;min-height:1.35em}
+.rv-r.live .rv-s,.rv-r.queued .rv-s{box-shadow:inset 0 0 0 3px var(--tape)}
+.sched .gp2{display:flex;gap:6px;font-size:22px;align-items:center}

@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { grpName, hasGrpLabel, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -36,7 +36,7 @@ function liveView() {
   // Team panels show the team name only
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
   const body = {
-    info: `<div class="lh">${m.grp ? `<span><b>${esc(grpName(m.grp))}</b></span>` : `<span>${stageLabel(m.stage)}</span>`}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
+    info: `<div class="lh">${m.grp ? `<span><b>${esc(grpName(m.grp))}</b></span>` : `<span>${stageLabel(m.stage)}</span>`}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${gamesOf(m.code).some((x) => x.status === "done" || x.status === "replay") ? `<span class="lh-p">${gamePills(m)}</span>` : ""}${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
     bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16 })}</div>`,
@@ -61,7 +61,7 @@ function standingsView() {
 }
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
-  return `${head("Schedule")}<div class="sched">${matches().map((m) => `<div class="${m.status}"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="s">${m.status === "done" ? m.red_wins + "-" + m.blue_wins : m.sched_at ? fmtTime(m.sched_at) : ""} ${st[m.status] || ""}</span></div>`).join("")}</div>`;
+  return `${head("Schedule")}<div class="sched">${matches().map((m) => `<div class="${m.status}"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="gp2">${gamePills(m)}</span><span class="s">${m.status === "done" ? m.red_wins + "-" + m.blue_wins : m.sched_at ? fmtTime(m.sched_at) : ""} ${st[m.status] || ""}</span></div>`).join("")}</div>`;
 }
 // Live draw : the first round matches with each side shown by its number until Admin places a name there.
 // A name that just arrived gets a short highlight.
@@ -80,6 +80,46 @@ function liveDrawView() {
   return `${head("Draw")}<div class="dlive"><div class="dt"><h2>${esc(title)}<span>${placed} of ${names.size} teams drawn</span></h2>
     <div class="dt-rows" style="--rh:${rh}px">${ms.map((m) => `<div class="dt-r"><b>${esc(m.code)}</b>${cell(m, "red")}<em>vs</em>${cell(m, "blue")}</div>`).join("")}</div></div>
     <div class="dn"><h2>Teams</h2>${[...names].sort((a, b) => a[0] - b[0]).map(([sd, n]) => `<div class="dn-r${n ? "" : " blank"}${fresh.has(sd) ? " dnew" : ""}"><small>${sd}</small><span>${n ? esc(n) : "..."}</span></div>`).join("")}</div></div>`;
+}
+// ---------- Game by game results and the round view ----------
+// One pill per game in play order : side colour for a won game, TIE for a replay, outline for the game being played
+function gamePills(m) {
+  return gamesOf(m.code).map((g) => {
+    if (g.status === "done" && g.winner) return `<i class="gpl ${g.winner === "red" ? "r" : "b"}">G${gameNo(m.code, g)}</i>`;
+    if (g.status === "replay") return `<i class="gpl t">TIE</i>`;
+    if (g.status === "live" || g.status === "review" || (g.status === "ready" && m.field_no != null)) return `<i class="gpl now">G${gameNo(m.code, g)}</i>`;
+    return "";
+  }).join("");
+}
+function roundTitle(r) {
+  const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))];
+  if (gs.length) return gs.map((g) => grpName(g)).join(" and ");
+  if (r.key === "final") return r.ms.some((m) => m.stage === "third") ? "Final and 3rd place" : "Final";
+  return stageLabel(r.key);
+}
+// Admin picks a round, or auto follows the match on the field, then the next match, then the last round played
+function pickRound(list) {
+  const want = event().dash_layout?.rnd;
+  if (want && want !== "auto") { const r = list.find((x) => x.key === want); if (r) return r; }
+  const f = field(1), on = f && f.match_code ? match(f.match_code) : null, nx = on || upNext(1)[0];
+  if (nx) { const r = list.find((x) => x.key === roundKey(nx)); if (r) return r; }
+  return [...list].reverse().find((r) => r.ms.some((m) => m.status === "done")) || list.find((r) => r.key !== "practice") || list[0];
+}
+function roundsView() {
+  const list = roundList(); if (!list.length) return `${head("Matches")}<div class="rv"><h2>No matches</h2></div>`;
+  const r = pickRound(list), f = field(1);
+  const n = r.ms.length + new Set(r.ms.map((m) => m.grp || "")).size - 1;
+  const rh = Math.max(48, Math.min(92, Math.floor((790 - 12 * Math.max(0, n - 1)) / Math.max(1, n))));
+  const cell = (m, s) => `<div class="rv-s ${s === "red" ? "side-r" : "side-b"}${m.winner_seed != null && m.winner_seed === m[s + "_seed"] ? " win" : ""}"><span>${esc(sideName(m, s))}</span></div>`;
+  const st = (m) => (f && f.match_code === m.code && m.status !== "done" ? `<em class="on">On field</em>` : m.status === "done" ? `<em>${m.walkover ? "Walkover" : "Final"}</em>` : m.sched_at ? `<em>${fmtTime(m.sched_at)}</em>` : "<em></em>");
+  let prevG = null;
+  const rows = r.ms.map((m) => {
+    const sec = m.grp && m.grp !== prevG && r.ms.some((x) => x.grp && x.grp !== m.grp) ? `<div class="rv-g">${esc(grpName(m.grp))}</div>` : "";
+    prevG = m.grp;
+    const started = m.red_wins + m.blue_wins > 0 || m.status === "done";
+    return `${sec}<div class="rv-r ${m.status}"><b>${esc(m.code)}</b>${cell(m, "red")}<div class="rv-m"><div class="rv-sc">${started ? `<span class="r">${m.red_wins}</span>-<span class="b">${m.blue_wins}</span>` : "vs"}</div><div class="rv-p">${gamePills(m)}</div></div>${cell(m, "blue")}${st(m)}</div>`;
+  }).join("");
+  return `${head(esc(roundTitle(r)))}<div class="rv" style="--rh:${rh}px"><h2>${esc(roundTitle(r))}<span>Bo${Math.max(...r.ms.map((m) => m.bo))} · ${r.ms.filter((m) => m.status === "done").length} of ${r.ms.length} matches played</span></h2><div class="rv-rows">${rows}</div></div>`;
 }
 function drawView() {
   if (event().draw_state && event().draw_state.live) return liveDrawView();
@@ -115,7 +155,7 @@ function render() {
   const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed])]) + (md === "draw" && !event().draw_state?.live ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
-  stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "champion" ? champView() : bracketView();
+  stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "rounds" ? roundsView() : md === "champion" ? champView() : bracketView();
   fitBrackets(stage); paintNet();
 }
 onChange(render); connect();
@@ -148,7 +188,7 @@ raf(() => {
   // Knockout : Mission complete stops the clock, show it once per game
   if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id) {
     koShown = g.id;
-    if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: sd, title: "KNOCKOUT!", name: sd === "both" ? "RED + BLUE" : sideName(m, sd), sub: `Mission complete ${fmtMs1(f.stop_ms)}` }); }
+    if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: sd, label: "Knockout", name: sd === "both" ? `${sideName(m, "red")} + ${sideName(m, "blue")}` : sideName(m, sd), detail: `Mission complete at ${fmtMs1(f.stop_ms)}, rule 6.1`, meta: `Match ${m.code} · Game ${gameNo(m.code, g)}` }); }
   }
   if (m) {
     const gs = gamesOf(m.code), bnEl = $("bn");
@@ -164,9 +204,10 @@ raf(() => {
         const fresh = Date.now() - LOAD_T > 4000 && Date.now() - bestTs < 8000;
         lastDone = d.id + d.version;
         if (fresh) {
-          if (d.status === "replay") popup({ kind: "tie", title: "TIE", name: "Replay", sub: "แข่งใหม่ แบบสนามเดิม" });
-          else if (m.status === "done" && m.winner_seed != null) popup({ kind: "match", side: d.winner, title: "WINNER!", name: teamName(m.winner_seed), sub: `ชนะคู่ ${m.code} ${m.red_wins}-${m.blue_wins}` });
-          else popup({ kind: "game", side: d.winner, title: `${d.winner.toUpperCase()} WINS`, name: sideName(m, d.winner), sub: `Game ${gameNo(m.code, d)} · ${RULE_EN[d.method] || ""} · ${m.red_wins}-${m.blue_wins}` });
+          const meta = `Match ${m.code} · Game ${gameNo(m.code, d)}`;
+          if (d.status === "replay") popup({ kind: "tie", label: "Tie", name: "Replay", detail: "Same field pattern, FAQ 34", meta });
+          else if (m.status === "done" && m.winner_seed != null) popup({ kind: "match", side: d.winner, label: "Match winner", name: teamName(m.winner_seed), detail: `${m.grp ? grpName(m.grp) : stageLabel(m.stage)}, Bo${m.bo}`, meta: `Match ${m.code}`, score: [m.red_wins, m.blue_wins] });
+          else popup({ kind: "game", side: d.winner, label: `Game ${gameNo(m.code, d)} winner`, name: sideName(m, d.winner), detail: RULE_EN[d.method] || "", meta, score: [m.red_wins, m.blue_wins] });
         }
       }
     }
@@ -196,24 +237,22 @@ function say(t) {
   if (!sound || !window.speechSynthesis) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = "en-US"; u.rate = 1.1; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
 }
-// Popup over the whole screen for about 6 seconds, with a burst of confetti and a short fanfare
-function popup({ kind, side, title, name, sub }) {
+// Result plate over the whole screen for about 6 seconds : event header, what happened, the team, the reason
+// and the series score, in the side colour. A short fanfare plays when sound is on.
+function popup({ kind, side, label, name, detail, meta, score }) {
   // Own layer above the screen, scaled like the stage, so screen redraws do not remove it
   const stage = $("stage"); if (!stage) return;
   let st = $("fxl"); if (!st) { st = document.createElement("div"); st.id = "fxl"; document.body.append(st); }
   st.style.transform = stage.style.transform;
   st.querySelector(".pop8")?.remove();
-  const col = side === "red" ? "#CF3A2E" : side === "blue" ? "#2457C5" : "#F2B705";
-  const n = kind === "tie" ? 0 : kind === "match" ? 160 : 90, bits = [];
-  for (let i = 0; i < n; i++) {
-    const c = ["#F2B705", "#ffffff", col, "#00878F", "#E07A1F"][i % 5], x = Math.random() * 1920, dx = (Math.random() - 0.5) * 600, d = 1.6 + Math.random() * 2.2, r = Math.random() * 720;
-    bits.push(`<i style="left:${x}px;background:${c};--dx:${dx}px;--r:${r}deg;animation-duration:${d}s;animation-delay:${Math.random() * 0.6}s"></i>`);
-  }
+  const sideTag = side === "red" || side === "blue" ? `<span class="sd8 ${side === "red" ? "side-r" : "side-b"}">${side.toUpperCase()}</span>` : side === "both" ? `<span class="sd8">RED + BLUE</span>` : "";
   const el = document.createElement("div");
-  el.className = "pop8 " + kind; el.style.setProperty("--c", col);
-  el.innerHTML = `<div class="rays"></div><div class="conf">${bits.join("")}</div><div class="card8"><div class="t8">${esc(title)}</div><div class="n8">${esc(name || "")}</div><div class="s8">${esc(sub || "")}</div></div>`;
+  el.className = "pop8 " + kind + (side === "red" ? " side-r" : side === "blue" ? " side-b" : "");
+  el.innerHTML = `<div class="card8"><div class="h8"><img src="../shared/irap.png" alt=""><span>${esc(event().name || "")}</span><b>${esc(meta || "")}</b></div>
+    <div class="b8"><div class="l8">${esc(label)}</div>${sideTag}<div class="n8">${esc(name || "")}</div>${detail ? `<div class="s8">${esc(detail)}</div>` : ""}
+    ${score ? `<div class="sc8"><span class="c-r">${score[0]}</span><i>-</i><span class="c-b">${score[1]}</span></div>` : ""}</div></div>`;
   st.append(el);
-  if (kind === "ko" || kind === "match") { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => snd(f, i === 3 ? 600 : 160), i * 170)); say(kind === "ko" ? "Knockout!" : "Winner!"); }
+  if (kind === "ko" || kind === "match") { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => snd(f, i === 3 ? 600 : 160), i * 170)); say(kind === "ko" ? "Knockout" : "Match winner"); }
   else if (kind === "game") { snd(784, 200); setTimeout(() => snd(1047, 400), 220); }
   else snd(440, 500);
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 500); }, kind === "match" ? 7000 : 5500);

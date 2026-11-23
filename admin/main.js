@@ -3,7 +3,7 @@ import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
-import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
+import { roundList, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
 
 // Admin is in Thai; the Dashboard keeps English for the TV
 setLang("th");
@@ -711,11 +711,14 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- Dashboard tab ----------
+const roundTitleTh = (r) => { const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))]; return gs.length ? gs.map((g) => grpName(g)).join(" และ ") : r.key === "practice" ? "คู่ซ้อม" : r.key === "final" && r.ms.some((m) => m.stage === "third") ? "ชิงชนะเลิศและชิงที่ 3" : stageLabel(r.key); };
 function tvView() {
   lay = liveLayout(event().dash_layout?.live);
-  const ev = event(), M = [["auto", "อัตโนมัติ", "มีคู่บนสนามใช้หน้าถ่ายทอดสด ไม่มีใช้ตารางสาย จบคู่ชิงขึ้นหน้าแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "ตารางคะแนนทุกสาย"], ["schedule", "ตารางเวลา", "ลำดับคู่ เวลานัด สถานะ"], ["draw", "จับสาย", "เผยชื่อทีมทีละทีม"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  const ev = event(), M = [["auto", "อัตโนมัติ", "มีคู่บนสนามใช้หน้าถ่ายทอดสด ไม่มีใช้ตารางสาย จบคู่ชิงขึ้นหน้าแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "ตารางคะแนนทุกสาย"], ["schedule", "ตารางเวลา", "ลำดับคู่ เวลานัด สถานะ"], ["rounds", "ตารางคู่รายรอบ", "คู่ทั้งหมดของรอบเดียว แดงและน้ำเงินตามฝั่ง พร้อมผลรายเกม"], ["draw", "จับสาย", "เผยชื่อทีมทีละทีม หรือตารางจับสายสด"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
   return `<div class="h2"><h2>โหมดจอ Dashboard</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้อัตโนมัติ</span></div>
    <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>ใช้</button></div>`).join("")}</div>
+   <div class="h2" style="margin-top:22px"><h2>รอบในตารางคู่รายรอบ</h2><span>อัตโนมัติจะแสดงรอบของคู่บนสนาม ถ้าไม่มีใช้รอบของคู่ถัดไป</span></div>
+   <div class="card"><div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitleTh(r)])].map(([k, t]) => { const on = (ev.dash_layout?.rnd || "auto") === k; return `<button class="btn ${on ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${on ? "disabled" : ""}>${esc(t)}</button>`; }).join("")}</div></div>
    <div class="h2" style="margin-top:22px"><h2>ตารางสายแสดง</h2><span>ใช้กับตารางสายทุกจอ อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</span></div>
    <div class="card"><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div></div>
    <div class="h2" style="margin-top:22px"><h2>ผังจอถ่ายทอดสด</h2><span>ลากเพื่อย้าย ลากมุมขวาล่างเพื่อลดขยาย ติ๊กเพื่อซ่อนหรือแสดง แล้วกดบันทึกผัง</span></div>
@@ -1030,6 +1033,7 @@ const H = {
   },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "จอ Dashboard กลับเป็นอัตโนมัติ"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "เปลี่ยนตารางสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "บันทึกผังแล้ว"); },
   layreset() { lay = liveLayout(null); paintLay(); },

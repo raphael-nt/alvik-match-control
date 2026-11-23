@@ -96,6 +96,17 @@ export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_
 export const hasGrpLabel = (g) => { const l = event().format && event().format.labels; return !!(l && l[g]); };
 // Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
 export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || (th() ? "กลุ่ม " : "Group ") + g; };
+// Rounds in play order, one per stage; the 3rd place match is shown with the final
+export const roundKey = (m) => (m.stage === "third" ? "final" : m.stage);
+export function roundList() {
+  const out = [];
+  for (const m of matches().slice().sort((a, b) => a.order_no - b.order_no)) {
+    const k = roundKey(m); let r = out.find((x) => x.key === k);
+    if (!r) out.push((r = { key: k, ms: [] }));
+    r.ms.push(m);
+  }
+  return out;
+}
 export const srcLabel = (src) => (!src ? "" : th() ? (src.seed ? "ทีมลำดับ " + src.seed : src.g ? `อันดับ ${src.p} ${grpName(src.g)}` : src.w ? "ผู้ชนะ " + src.w : src.l ? "ผู้แพ้ " + src.l : "") : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
 export const tableOf = (grp) => {
