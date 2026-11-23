@@ -148,3 +148,22 @@ body.cur,body.cur *{cursor:default}
 @keyframes p8fall{to{transform:translate(var(--dx),1200px) rotate(var(--r))}}
 @media (prefers-reduced-motion:reduce){.pop8 .rays,.pop8 .conf{display:none}}
 #fxl{position:fixed;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;pointer-events:none;z-index:20}
+/* Live draw : first round matches on the left, numbered team list on the right */
+.dlive{flex:1;display:grid;grid-template-columns:1fr 420px;gap:28px;min-height:0}
+.dt,.dn{background:var(--panel);border-radius:10px;padding:24px 32px;display:grid;align-content:start;gap:14px;min-height:0}
+.dt h2,.dn h2{font-size:44px;display:flex;align-items:baseline;gap:20px}.dt h2 span{font-size:26px;color:var(--muted);font-weight:500}
+.dt-rows{display:grid;gap:8px}
+.dt-r{display:grid;grid-template-columns:90px 1fr 60px 1fr;gap:14px;align-items:center;height:var(--rh)}
+.dt-r>b{font-size:30px;color:var(--muted)}.dt-r>em{font-style:normal;text-align:center;font-size:26px;color:var(--muted)}
+.dt-s{height:100%;display:flex;align-items:center;gap:16px;padding:0 22px;border-radius:10px;font-size:38px;font-weight:600;min-width:0}
+.dt-s span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-s small{font-size:22px;font-weight:700;opacity:.7;min-width:28px}
+.dt-s.side-r{background:var(--red-soft);border-left:10px solid var(--red)}
+.dt-s.side-b{background:var(--blue-soft);border-left:10px solid var(--blue)}
+.dt-s.blank{font-weight:500;color:var(--muted)}
+.dn-r{display:flex;align-items:center;gap:18px;font-size:34px;font-weight:600;min-height:72px;border-bottom:2px solid var(--line);min-width:0}
+.dn-r small{font-size:24px;color:var(--muted);width:36px}.dn-r span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dn-r.blank{color:var(--muted);font-weight:500}
+.dnew{animation:dnew 2.4s ease-out}
+.dnew span{animation:pop .5s ease-out}
+@keyframes dnew{0%,35%{box-shadow:0 0 0 6px var(--tape);background-color:var(--tape-soft)}100%{box-shadow:0 0 0 0 transparent}}

@@ -133,3 +133,19 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .tools .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tools .row select,.tools .row input{flex:1;min-width:160px}
 .sched{margin-bottom:12px}.sched .gf{margin:6px 0}
 .pteams{display:flex;flex-wrap:wrap;gap:6px 16px}.pteams .chk2 input{width:18px;height:18px;min-height:0}
+/* Live draw : prepared names on the left, numbered slots on the right */
+.drawp{display:grid;gap:12px}.drawp label{display:grid;gap:6px;font-weight:500}.drawp textarea{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm)}
+.dgrid{display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,1.4fr);gap:16px}
+@media (max-width:720px){.dgrid{grid-template-columns:1fr}}
+.dpool{display:grid;gap:10px;align-content:start}.dpool h3{font-size:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--teal);background:#e8f4f4;color:var(--ink);border-radius:99px;padding:8px 14px;font:inherit;font-weight:500;cursor:grab;touch-action:manipulation}
+.chip.on{background:var(--teal);color:#fff;outline:3px solid var(--tape);outline-offset:1px}
+.chip.in{border-color:var(--line);background:var(--panel)}
+.dadd{display:flex;gap:8px}.dadd input{flex:1;min-width:0}
+.dslots{display:grid;gap:6px}
+.dslot{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:52px;padding:6px 10px;border:2px dashed var(--line);border-radius:var(--r-sm);cursor:pointer}
+.dslot b{font-size:20px;text-align:center}
+.dslot.full{border-style:solid}
+.dslot.ready{border-color:var(--teal)}
+.dslot.over{border-color:var(--tape);background:var(--tape-soft)}

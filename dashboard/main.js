@@ -63,7 +63,26 @@ function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
   return `${head("Schedule")}<div class="sched">${matches().map((m) => `<div class="${m.status}"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="s">${m.status === "done" ? m.red_wins + "-" + m.blue_wins : m.sched_at ? fmtTime(m.sched_at) : ""} ${st[m.status] || ""}</span></div>`).join("")}</div>`;
 }
+// Live draw : the first round matches with each side shown by its number until Admin places a name there.
+// A name that just arrived gets a short highlight.
+let drawSeen = null;
+function liveDrawView() {
+  const r1 = groups().filter((g) => g.stage === "r1"), inR1 = new Set(r1.map((g) => g.grp));
+  const ms = matches().filter((m) => inR1.has(m.grp)).sort((a, b) => a.order_no - b.order_no);
+  const names = new Map(teamsArr().map((t) => [t.seed, t.name || ""]));
+  const fresh = new Set(drawSeen ? [...names].filter(([sd, n]) => n && drawSeen.get(sd) !== n).map(([sd]) => sd) : []);
+  drawSeen = names;
+  const cell = (m, s) => { const sd = m[s + "_seed"], n = sd != null ? names.get(sd) : "";
+    return `<div class="dt-s ${s === "red" ? "side-r" : "side-b"}${n ? "" : " blank"}${fresh.has(sd) ? " dnew" : ""}">${n ? `<small>${sd}</small>` : ""}<span>${n ? esc(n) : sd != null ? "Team " + sd : esc(sideName(m, s))}</span></div>`; };
+  const title = r1.length === 1 ? grpName(r1[0].grp) : r1.map((g) => grpName(g.grp)).join(", ");
+  const placed = [...names.values()].filter(Boolean).length;
+  const rh = Math.max(48, Math.min(88, Math.floor((760 - 8 * Math.max(0, ms.length - 1)) / Math.max(1, ms.length))));
+  return `${head("Draw")}<div class="dlive"><div class="dt"><h2>${esc(title)}<span>${placed} of ${names.size} teams drawn</span></h2>
+    <div class="dt-rows" style="--rh:${rh}px">${ms.map((m) => `<div class="dt-r"><b>${esc(m.code)}</b>${cell(m, "red")}<em>vs</em>${cell(m, "blue")}</div>`).join("")}</div></div>
+    <div class="dn"><h2>Teams</h2>${[...names].sort((a, b) => a[0] - b[0]).map(([sd, n]) => `<div class="dn-r${n ? "" : " blank"}${fresh.has(sd) ? " dnew" : ""}"><small>${sd}</small><span>${n ? esc(n) : "..."}</span></div>`).join("")}</div></div>`;
+}
 function drawView() {
+  if (event().draw_state && event().draw_state.live) return liveDrawView();
   const ds = event().draw_state || {}, t = now() - (ds.start || 0);
   const col = (title, seeds) => `<div class="dc"><h2>${title}</h2>${seeds.map((sd) => `<div class="slot"><small>${sd}</small>${t >= (sd - 1) * 1600 ? `<span class="nm">${esc(teamName(sd))}</span>` : `<span class="muted">...</span>`}</div>`).join("")}</div>`;
   const r1 = groups().filter((g) => g.srcs?.some((x) => x && x.seed != null));
@@ -93,7 +112,7 @@ let key = "", cur = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
-  const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed])]) + (md === "draw" ? Math.floor(Date.now() / 800) : "");
+  const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed])]) + (md === "draw" && !event().draw_state?.live ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
   stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "champion" ? champView() : bracketView();

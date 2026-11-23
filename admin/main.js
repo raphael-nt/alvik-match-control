@@ -648,9 +648,67 @@ function teamsView() {
    <div class="h2" style="margin-top:20px"><h2>ทีม</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง กดสุ่มลำดับเพื่อจับสาย</span></div>
    <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? esc(grpName(g.grp)) : "ทีม (ตามลำดับ)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="ทีม ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>ไม่มา</label></div>`; }).join("")}</div>`).join("")}</div>
    <div class="btns"><button class="btn primary" data-act="saveteams">บันทึกชื่อทีม</button><button class="btn" data-act="shuffle">สุ่มลำดับ</button></div>
-   <div class="h2" style="margin-top:24px"><h2>จับสายบนจอ Dashboard</h2><span>${draw ? "จอ Dashboard อยู่ในโหมดจับสาย" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม จอ Dashboard จะเผยชื่อทีมทีละทีม"}</span></div>
-   <div class="btns"><button class="btn primary" data-act="drawstart">เริ่มจับสาย</button><button class="btn" data-act="tvauto">กลับไปโหมดอัตโนมัติ</button></div>`;
+   <div class="h2" style="margin-top:24px"><h2>จับสายสด</h2><span>${isLiveDraw() ? "กำลังจับสาย ลากชื่อไปวางที่หมายเลข หรือแตะชื่อแล้วแตะหมายเลข จอ Dashboard ขึ้นชื่อทันที" : draw ? "จอ Dashboard อยู่ในโหมดจับสาย" : "เตรียมรายชื่อไว้ก่อน กดเริ่มแล้วค่อยวางชื่อทีละทีมระหว่างงาน"}</span></div>
+   ${drawPanel()}`;
 }
+
+// ---------- Live draw ----------
+// Prepared names live in event.draw_state.pool. Placing a name on number N saves it as team N's name,
+// so the matches, the referee page and the Dashboard show it right away.
+const isLiveDraw = () => !!(event().draw_state && event().draw_state.live);
+const seedNames = () => teamsArr().slice().sort((a, b) => a.seed - b.seed).map((t) => t.name || "");
+function drawLeft() {
+  const left = [...((event().draw_state && event().draw_state.pool) || [])];
+  seedNames().filter(Boolean).forEach((n) => { const i = left.indexOf(n); if (i >= 0) left.splice(i, 1); });
+  return left;
+}
+let drawPick = null, drawBusy = false;   // name picked by a tap, waiting for a number
+function drawPanel() {
+  const ds = event().draw_state || {};
+  if (!ds.live) {
+    const prep = (ds.pool && ds.pool.length ? ds.pool : seedNames().filter(Boolean)).join("\n");
+    return `<div class="card drawp"><label>รายชื่อที่เตรียมไว้ (บรรทัดละ 1 ทีม)<textarea id="dpool" rows="${Math.max(6, teamsArr().length)}">${esc(prep)}</textarea></label>
+      <p class="muted">กดเริ่มแล้วชื่อทีมทั้ง ${teamsArr().length} หมายเลขจะว่าง จอ Dashboard เปลี่ยนเป็นตารางคู่ของรอบแรก แล้วค่อยวางชื่อทีละทีม</p>
+      <div class="btns"><button class="btn primary" data-act="dlstart">เริ่มจับสายสด</button>${event().tv_mode === "draw" ? `<button class="btn" data-act="tvauto">กลับไปโหมดอัตโนมัติ</button>` : ""}</div></div>`;
+  }
+  const left = drawLeft(), t = teamsArr().slice().sort((a, b) => a.seed - b.seed);
+  const chip = (n, inSlot) => `<button type="button" class="chip${drawPick === n ? " on" : ""}${inSlot ? " in" : ""}" draggable="true" data-dname="${esc(n)}">${esc(n)}</button>`;
+  return `<div class="card drawp live"><div class="dgrid">
+    <div class="dpool"><h3>ยังไม่ได้วาง (${left.length})</h3><div class="chips">${left.map((n) => chip(n)).join("") || `<p class="muted">วางครบทุกชื่อแล้ว</p>`}</div>
+      <div class="dadd"><input id="dnew" maxlength="40" placeholder="เพิ่มชื่อทีม"><button class="btn small" data-act="dladd">เพิ่ม</button></div></div>
+    <div class="dslots">${t.map((x) => `<div class="dslot${x.name ? " full" : ""}${drawPick && !x.name ? " ready" : ""}" data-dslot="${x.seed}"><b>${x.seed}</b><div>${x.name ? chip(x.name, true) : `<span class="muted">วางชื่อที่นี่</span>`}</div>${x.name ? `<button class="btn small" data-act="dlclear" data-s="${x.seed}" aria-label="เอาชื่อออกจากหมายเลข ${x.seed}">เอาออก</button>` : ""}</div>`).join("")}</div></div>
+    <div class="btns"><button class="btn primary" data-act="dlend">จบการจับสาย</button><button class="btn" data-act="dlreset">ล้างทุกหมายเลข</button></div></div>`;
+}
+function drawRedraw() { formTab = ""; render(); }
+async function drawSave(names) {
+  if (drawBusy) return false; drawBusy = true;
+  try { const r = await act(() => adm("a2_adm_teams", { p_names: names })); if (r === undefined) return false; await loadAll().catch(() => {}); return true; }
+  finally { drawBusy = false; drawRedraw(); }
+}
+// Put a name on a number : it leaves any number it was on, and the name already there goes back to the pool
+function drawPlace(name, seed) {
+  const names = seedNames();
+  if (names[seed - 1] === name) { drawPick = null; drawRedraw(); return; }
+  names.forEach((n, i) => { if (n === name) names[i] = ""; });
+  names[seed - 1] = name; drawPick = null;
+  drawSave(names);
+}
+document.addEventListener("dragstart", (e) => { const c = e.target.closest && e.target.closest("[data-dname]"); if (!c) return; e.dataTransfer.setData("text/plain", c.dataset.dname); e.dataTransfer.effectAllowed = "move"; });
+document.addEventListener("dragover", (e) => { const s = e.target.closest && e.target.closest("[data-dslot]"); if (!s) return; e.preventDefault(); s.classList.add("over"); });
+document.addEventListener("dragleave", (e) => { const s = e.target.closest && e.target.closest("[data-dslot]"); if (s && !s.contains(e.relatedTarget)) s.classList.remove("over"); });
+document.addEventListener("drop", (e) => {
+  const s = e.target.closest && e.target.closest("[data-dslot]"); if (!s) return;
+  e.preventDefault(); s.classList.remove("over");
+  const n = e.dataTransfer.getData("text/plain"); if (n) drawPlace(n, +s.dataset.dslot);
+});
+// Tap a name, then tap a number (phones and tablets have no drag and drop)
+document.addEventListener("click", (e) => {
+  if (!e.target.closest || !e.target.closest(".drawp.live") || e.target.closest("[data-act]")) return;
+  const c = e.target.closest("[data-dname]");
+  if (c) { drawPick = drawPick === c.dataset.dname ? null : c.dataset.dname; drawRedraw(); return; }
+  const s = e.target.closest("[data-dslot]");
+  if (s && drawPick) drawPlace(drawPick, +s.dataset.dslot);
+});
 
 // ---------- Dashboard tab ----------
 function tvView() {
@@ -947,6 +1005,29 @@ const H = {
   cmdn(b) { const m = fmtEdit().customMatches, i = +b.dataset.i; if (i < m.length - 1) { [m[i], m[i + 1]] = [m[i + 1], m[i]]; redrawFmt(); } },
   cmdel(b) { fmtEdit().customMatches.splice(+b.dataset.i, 1); redrawFmt(); },
   async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "เริ่มจับสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async dlstart() {
+    const pool = [...new Set(($("dpool")?.value || "").split("\n").map((s) => s.trim().slice(0, 40)).filter(Boolean))];
+    if (!pool.length) return toast("ใส่รายชื่อทีมก่อน", true);
+    if (!confirm(`เริ่มจับสายสด ชื่อทีมทั้ง ${teamsArr().length} หมายเลขจะว่าง แล้วค่อยวางชื่อทีละทีม`)) return;
+    if ((await act(() => adm("a2_adm_teams", { p_names: teamsArr().map(() => "") }))) === undefined) return;
+    await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { live: true, pool } } }), "เริ่มจับสายสดแล้ว");
+    drawPick = null; await loadAll().catch(() => {}); drawRedraw();
+  },
+  async dladd() {
+    const n = ($("dnew")?.value || "").trim().slice(0, 40); if (!n) return;
+    const ds = event().draw_state || {}, pool = ds.pool || [];
+    if (pool.includes(n)) return toast("มีชื่อนี้แล้ว", true);
+    await act(() => adm("a2_adm_event", { p: { draw_state: { ...ds, pool: [...pool, n] } } }));
+    await loadAll().catch(() => {}); drawRedraw();
+  },
+  dlclear(b) { const names = seedNames(); names[+b.dataset.s - 1] = ""; drawSave(names); },
+  dlreset() { if (confirm("เอาชื่อออกจากทุกหมายเลข")) drawSave(seedNames().map(() => "")); },
+  async dlend() {
+    const empty = seedNames().filter((n) => !n).length;
+    if (empty && !confirm(`ยังว่างอยู่ ${empty} หมายเลข จบการจับสายเลยไหม`)) return;
+    await act(() => adm("a2_adm_event", { p: { tv_mode: "auto", draw_state: { ...(event().draw_state || {}), live: false } } }), "จบการจับสายแล้ว จอ Dashboard กลับเป็นอัตโนมัติ");
+    drawPick = null; await loadAll().catch(() => {}); drawRedraw();
+  },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "จอ Dashboard กลับเป็นอัตโนมัติ"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "เปลี่ยนตารางสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
