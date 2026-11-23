@@ -1,5 +1,5 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
-import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName } from "./common.js";
+import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, bracketMode } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
 
 // Data source : live store, or preview data from bracketHtml({ data: { groups, matches } }) before a format is applied
@@ -10,8 +10,10 @@ function setPreview(data) {
     red_wins: 0, blue_wins: 0, winner_seed: null, status: "locked", field_no: null, walkover: null, forfeit: null }));
   PV = { groups: data.groups, matches: ms, byCode: new Map(ms.map((m) => [m.code, m])) };
 }
-const _groups = () => (PV ? PV.groups : groups());
-const _matches = () => (PV ? PV.matches : matches());
+// Live data shows one day only : practice matches, or the real groups and knockout (set per render in bracketHtml)
+let SHOW = "comp";
+const _groups = () => (PV ? PV.groups : SHOW === "practice" ? [] : groups());
+const _matches = () => (PV ? PV.matches : matches().filter((m) => (m.stage === "practice") === (SHOW === "practice")));
 const _match = (c) => (PV ? PV.byCode.get(c) : match(c));
 const _table = (g) => {
   if (!PV) return tableOf(g);
@@ -78,6 +80,14 @@ function columns() {
     arr.push(m);
   });
   const pushStage = (items) => { if (items.length) splitByDeps(items).forEach((c) => cols.push(c)); };
+  // Practice matches do not feed each other, so lay them out as a near square grid instead of one tall column
+  if (SHOW === "practice" && !PV) {
+    const items = ms.map((m) => ({ kind: "m", m, n: 2 }));
+    let per = Math.ceil(items.length / Math.max(1, Math.ceil(Math.sqrt(items.length))));
+    if (IS_COMPACT) per = Math.min(per, 3);
+    for (let i = 0; i < items.length; i += per) cols.push(items.slice(i, i + per));
+    return cols;
+  }
   const preStages = [...preSet].sort((a, b) => stageNum(a) - stageNum(b) || a.localeCompare(b));
   preStages.forEach((st) => pushStage([...(gBySt.get(st) || []), ...(mBySt.get(st) || []).map((m) => ({ kind: "m", m, n: 2 }))]));
   KO_ORDER.forEach((st) => {
@@ -335,9 +345,11 @@ function champHtml(boxes, finalKey) {
   return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(_team(w)) : "TBD"}</b></div>`;
 }
 
-// Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens
+// Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens,
+// opts.show ("practice" or "comp") overrides the day picked in Admin
 export function bracketHtml(opts = {}) {
   setPreview(opts.data || null);
+  SHOW = opts.data ? "comp" : opts.show || bracketMode();
   IS_COMPACT = !!opts.compact;
   useDims(IS_COMPACT ? COMPACT : FULL);
   const mByGrp = new Map();

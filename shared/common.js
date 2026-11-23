@@ -78,6 +78,18 @@ export const gameNo = (code, g) => {
   for (const x of gamesOf(code)) { if (x.idx <= g.idx && x.status !== "replay") n++; }
   return n;
 };
+// Which day the bracket shows, set in Admin > Dashboard and kept in dash_layout.bk
+// "practice" or "comp" force a day. Auto (anything else) shows practice while practice matches are open and no real game has been played.
+// Practice falls back to the real bracket when there are no practice matches, so the screen is never blank.
+export const BK_MODES = [["auto", "Auto"], ["practice", "Practice"], ["comp", "Competition"]];
+export const bracketSetting = () => { const v = event().dash_layout?.bk; return v === "practice" || v === "comp" ? v : "auto"; };
+export const bracketMode = () => {
+  const set = bracketSetting(), ms = matches(), prac = ms.filter((m) => m.stage === "practice");
+  if (!prac.length || set === "comp") return "comp";
+  if (set === "practice") return "practice";
+  const realPlayed = ms.some((m) => m.stage !== "practice" && gamesOf(m.code).length > 0);
+  return !realPlayed && prac.some((m) => m.status !== "done") ? "practice" : "comp";
+};
 export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
 // Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
 export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || "Group " + g; };
