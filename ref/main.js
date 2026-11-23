@@ -1,6 +1,6 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
 import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
-import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { bracketHtml, fitBrackets, roundTableHtml } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 // Fullscreen button shows only where the browser supports it (not on iPhone Safari)
 const fsOk = fsSupported();
@@ -312,7 +312,7 @@ function bracketScale(el) {
   const z = el.querySelector("[data-zv]"); if (z) z.textContent = Math.round((k / fit) * 100) + "%";
 }
 function paintBracket(el) {
-  const html = bracketHtml({}); if (html === bkHtml && el.querySelector("[data-bk]")) return;
+  const html = bracketHtml({ rounds: true }); if (html === bkHtml && el.querySelector("[data-bk]")) return;
   bkHtml = html; const box = el.querySelector(".sh-b"), x = box.scrollLeft, y = box.scrollTop;
   box.innerHTML = html; bracketScale(el); box.scrollLeft = x; box.scrollTop = y;
 }
@@ -320,7 +320,10 @@ function paintSheet() {
   let el = $("sheet");
   if (!sheet) { if (el) el.remove(); bkHtml = ""; return; }
   if (!el) { el = document.createElement("div"); el.id = "sheet"; document.body.append(el); }
-  if (sheet === "bracket") {
+  if (sheet.startsWith("round:")) {
+    // One round from the bracket : every match with scores and game by game results, Back returns to the bracket
+    el.innerHTML = `<div class="sh-h"><button class="ib dark" data-sheet="bracket" aria-label="Back to bracket">‹</button><b>Round</b>${sheetClose}</div><div class="sh-b rtbox" id="shrnd">${roundTableHtml(sheet.slice(6))}</div>`;
+  } else if (sheet === "bracket") {
     el.innerHTML = `<div class="sh-h"><b>Bracket</b><span class="zm"><button class="ib dark" data-zoom="-1" aria-label="Zoom out">−</button><span data-zv>100%</span><button class="ib dark" data-zoom="1" aria-label="Zoom in">+</button></span>${sheetClose}</div><div class="sh-b bkbox"></div>`;
     bkHtml = ""; paintBracket(el);
   } else {
@@ -330,12 +333,14 @@ function paintSheet() {
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-sheet]"); if (b) { sheet = b.dataset.sheet; zoom = 0; paintSheet(); return; }
+  const rn = e.target.closest("#sheet [data-rnd]"); if (rn) { sheet = "round:" + rn.dataset.rnd; paintSheet(); return; }
   const z = e.target.closest("[data-zoom]");
   if (z) { const el = $("sheet"), bk = el.querySelector("[data-bk]"), cur = parseFloat(bk.firstElementChild.style.transform.slice(6)) || 1; zoom = cur * (z.dataset.zoom === "1" ? 1.25 : 0.8); bracketScale(el); return; }
   const d = e.target.closest("[data-doc]"); if (d) showDoc(+d.dataset.doc, { p_pin: pin }, d.dataset.t);
 });
 // Keep the bracket current while it is open, and close the documents sheet if the admin turns it off
-onChange(() => { const el = $("sheet"); if (el && sheet === "bracket") paintBracket(el); if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
+onChange(() => { const el = $("sheet"); if (el && sheet === "bracket") paintBracket(el);
+  if (el && sheet.startsWith("round:")) { const b = $("shrnd"), h = roundTableHtml(sheet.slice(6)); if (b && b._h !== h) { b._h = h; b.innerHTML = h; } } if (sheet === "docs" && event().docs_ref === false) { sheet = ""; paintSheet(); } });
 addEventListener("resize", () => { const el = $("sheet"); if (el && sheet === "bracket") bracketScale(el); });
 
 // ---------- Choice popup and tap-the-clock control ----------

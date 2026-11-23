@@ -1,5 +1,5 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
-import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, hasGrpLabel, bracketMode } from "./common.js";
+import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, hasGrpLabel, bracketMode, field, gamesOf, gameNo, fmtTime, roundKey, roundList } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
 import { th } from "./lang.js";
 
@@ -158,7 +158,7 @@ function chipHtml(m, clickable) {
   const tip = `${m.code} ${_side(m, "red")} vs ${_side(m, "blue")}`;
   return `<button type="button" class="bk-chip ${m.status}"${clickable ? ` data-act="edit" data-c="${m.code}"` : ""} title="${esc(tip)}"><b>${m.code}</b>${started ? `<i>${m.red_wins}-${m.blue_wins}</i>` : ""}${m.walkover ? `<u>FF</u>` : ""}${m.field_no && m.status !== "done" ? `<em>●</em>` : ""}</button>`;
 }
-function boxHtml(b, clickable, mByGrp) {
+function boxHtml(b, clickable, mByGrp, rounds) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
   const title = isM ? (b.m.stage === "final" ? (th() ? "ชิงชนะเลิศ" : "Final") : b.m.stage === "third" ? (th() ? "ชิงอันดับที่ 3" : "3rd place") : b.m.code) : grpName(b.g.grp);
   const stLbl = isM ? stageLabel(b.m.stage) : hasGrpLabel(b.g.grp) ? "" : stageLabel(b.g.stage);
@@ -168,7 +168,9 @@ function boxHtml(b, clickable, mByGrp) {
     return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>${th() ? "ไม่มา" : "absent"}</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
   }).join("");
   const ms = isM ? [b.m] : (mByGrp.get(b.g.grp) || []);
-  return `<div class="bk-box${isM && b.m.stage === "final" ? " fin" : ""}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><div class="bk-h" style="height:${HH}px"><b>${title}</b><span>${sub}</span></div>${rh}<div class="bk-c" style="height:${b.ch}px">${ms.map((m) => chipHtml(m, clickable)).join("")}</div></div>`;
+  // With opts.rounds the header opens the table of every match in this round
+  const rk = rounds ? (isM ? roundKey(b.m) : ms[0] ? roundKey(ms[0]) : b.g.stage) : "";
+  return `<div class="bk-box${isM && b.m.stage === "final" ? " fin" : ""}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><div class="bk-h${rk ? " link" : ""}" style="height:${HH}px"${rk ? ` data-rnd="${esc(rk)}" role="button" tabindex="0" title="${th() ? "ดูคู่ทั้งหมดของรอบนี้" : "All matches of this round"}"` : ""}><b>${title}</b><span>${sub}</span>${rk ? "<i>›</i>" : ""}</div>${rh}<div class="bk-c" style="height:${b.ch}px">${ms.map((m) => chipHtml(m, clickable)).join("")}</div></div>`;
 }
 
 // Merge overlapping blocked [top, bot] intervals
@@ -346,7 +348,8 @@ function champHtml(boxes, finalKey) {
   return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>${th() ? "แชมป์" : "Champion"}</span><b>${w != null ? esc(_team(w)) : th() ? "รอผล" : "TBD"}</b></div>`;
 }
 
-// Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens,
+// Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.rounds makes each box header
+// open its round (data-rnd), opts.dark for dark screens,
 // opts.show ("practice" or "comp") overrides the day picked in Admin
 export function bracketHtml(opts = {}) {
   setPreview(opts.data || null);
@@ -362,7 +365,7 @@ export function bracketHtml(opts = {}) {
   const st = layout(mByGrp);
   const wireHtml = wires(st);
   const { boxes, finalKey, W, H } = st;
-  const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable, mByGrp)).join("") + (IS_COMPACT ? "" : champHtml(boxes, finalKey));
+  const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable, mByGrp, !!opts.rounds && !opts.data)).join("") + (IS_COMPACT ? "" : champHtml(boxes, finalKey));
   IS_COMPACT = false; useDims(FULL); setPreview(null);
   return `<div class="bk${opts.dark ? " dark" : ""}${opts.compact ? " compact" : ""}" data-bk data-w="${W}" data-h="${H}"${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wireHtml}</svg>${body}</div></div>`;
 }
@@ -377,3 +380,42 @@ export function fitBrackets(root = document) {
   });
 }
 addEventListener("resize", () => fitBrackets());
+
+// ---------- Round table : every match of one round, opened from a round header in the bracket ----------
+// One pill per game in play order : side colour for a won game, TIE for a replay, outline for the game being played
+export function gamePills(m) {
+  return gamesOf(m.code).map((g) => {
+    if (g.status === "done" && g.winner) return `<i class="gpl ${g.winner === "red" ? "r" : "b"}">G${gameNo(m.code, g)}</i>`;
+    if (g.status === "replay") return `<i class="gpl t">TIE</i>`;
+    if (g.status === "live" || g.status === "review" || (g.status === "ready" && m.field_no != null)) return `<i class="gpl now">G${gameNo(m.code, g)}</i>`;
+    return "";
+  }).join("");
+}
+export function roundTitle(r) {
+  const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))];
+  if (gs.length) return gs.map((g) => grpName(g)).join(th() ? " และ " : " and ");
+  if (r.key === "practice") return th() ? "คู่ซ้อม" : "Practice";
+  if (r.key === "final") return r.ms.some((m) => m.stage === "third") ? (th() ? "ชิงชนะเลิศและชิงที่ 3" : "Final and 3rd place") : (th() ? "ชิงชนะเลิศ" : "Final");
+  return stageLabel(r.key);
+}
+// Light table for Admin and the referee phone. opts.clickable lets a row open the match (data-act="edit")
+export function roundTableHtml(key, opts = {}) {
+  const r = roundList().find((x) => x.key === key);
+  if (!r) return `<p class="muted">${th() ? "ไม่พบรอบนี้" : "No such round"}</p>`;
+  const f = field(1), T = th();
+  const many = new Set(r.ms.map((m) => m.grp || "")).size > 1;
+  let prev = null;
+  const rows = r.ms.map((m) => {
+    const sec = many && m.grp !== prev ? `<div class="rt-g">${esc(m.grp ? grpName(m.grp) : stageLabel(m.stage))}</div>` : "";
+    prev = m.grp;
+    const on = f && f.match_code === m.code && m.status !== "done";
+    const st = on ? (T ? "บนสนาม" : "On field") : m.status === "done" ? (m.walkover ? (T ? "ชนะบาย" : "Walkover") : (T ? "จบแล้ว" : "Final")) : m.sched_at ? fmtTime(m.sched_at) : "";
+    const side = (s) => `<div class="rt-s ${s === "red" ? "side-r" : "side-b"}${m.winner_seed != null && m.winner_seed === m[s + "_seed"] ? " win" : ""}">${esc(sideName(m, s))}</div>`;
+    const started = m.red_wins + m.blue_wins > 0 || m.status === "done";
+    return `${sec}<div class="rt-r ${m.status}${on ? " on" : ""}"${opts.clickable ? ` data-act="edit" data-c="${esc(m.code)}" role="button" tabindex="0"` : ""}>
+      <div class="rt-c"><b>${esc(m.code)}</b><small>${esc(st)}</small></div>${side("red")}
+      <div class="rt-m"><div class="rt-sc">${started ? `<span class="c-r">${m.red_wins}</span>-<span class="c-b">${m.blue_wins}</span>` : "vs"}</div><div class="rt-p">${gamePills(m)}</div></div>${side("blue")}</div>`;
+  }).join("");
+  const done = r.ms.filter((m) => m.status === "done").length;
+  return `<div class="rt"><div class="rt-h"><b>${esc(roundTitle(r))}</b><span>Bo${Math.max(...r.ms.map((m) => m.bo))} · ${T ? `จบ ${done} จาก ${r.ms.length} คู่` : `${done} of ${r.ms.length} matches played`}</span></div>${rows}</div>`;
+}

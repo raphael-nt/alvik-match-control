@@ -1,5 +1,5 @@
 import { setLang } from "../shared/lang.js";
-import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { bracketHtml, fitBrackets, roundTableHtml, roundTitle } from "../shared/bracket.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
 import { roundList, hasGrpLabel, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
@@ -360,7 +360,7 @@ function printSchedule(title, list, day, newPage) {
 // ---------- Standings tab ----------
 function groupsView() {
   const n = groups().length || 1, cols = innerWidth < 760 ? 1 : n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4;
-  return `${hint("ตารางสายและอันดับคำนวณเองจากผล กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล ถ้ามีทีมเสมอทุกเกณฑ์ให้กดขึ้นเพื่อจัดลำดับ")}<div class="card hbk">${bracketHtml({ clickable: true })}</div>
+  return `${hint("ตารางสายและอันดับคำนวณเองจากผล กดหัวกล่องเพื่อดูคู่ทั้งหมดของรอบนั้น กดชิปคู่เพื่อดูหรือแก้ผล ถ้ามีทีมเสมอทุกเกณฑ์ให้กดขึ้นเพื่อจัดลำดับ")}<div class="card hbk">${bracketHtml({ clickable: true, rounds: true })}</div>
   <div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr));margin-top:14px">${groups().map((gr) => { const G = gr.grp;
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
     return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${hasGrpLabel(G) ? "" : stageLabel(gr.stage) + " "}เข้ารอบ ${gr.adv} ทีม</span></div>
@@ -402,9 +402,20 @@ function dlgHtml(code) {
    ${(m.red_seed != null && m.blue_seed != null && m.status !== "done") || m.forfeit ? ["red", "blue"].map((sd) => `<button class="btn danger" data-act="ff" data-s="${sd}">${esc(sideName(m, sd))} ไม่มา (แพ้บาย)</button>`).join("") : ""}${m.forfeit ? `<button class="btn" data-act="ff" data-s="">ยกเลิกแพ้บาย</button>` : ""}
    ${m.status === "ready" && free ? `<button class="btn primary" data-act="open" data-c="${m.code}" data-keep="1">เรียกขึ้นสนาม</button>` : ""}</div></div>`;
 }
-function openDlg(code) { dlgCode = code; dlg.innerHTML = dlgHtml(code); if (!dlg.open) dlg.showModal(); }
-function updateDlgBanner() { if (!dlg.open || !dlgCode) return; const w = $("dwarn"); if (w) w.hidden = sigOf(dlgCode) === dlgSig; }
-dlg.addEventListener("close", () => { dlgCode = ""; });
+function openDlg(code) { dlgCode = code; dlgRound = ""; dlg.innerHTML = dlgHtml(code); if (!dlg.open) dlg.showModal(); }
+let dlgRound = "";
+function openRound(key) {
+  dlgCode = ""; dlgRound = key;
+  dlg.innerHTML = `<div class="dh"><h2>คู่ทั้งหมดของรอบ</h2><button class="btn" data-act="dclose">ปิด</button></div><div class="db" id="rndb">${roundTableHtml(key, { clickable: true })}</div>`;
+  if (!dlg.open) dlg.showModal();
+}
+function updateDlgBanner() {
+  if (dlg.open && dlgRound) { const b = $("rndb"), h = roundTableHtml(dlgRound, { clickable: true }); if (b && b._h !== h) { b._h = h; b.innerHTML = h; } return; }
+  if (!dlg.open || !dlgCode) return; const w = $("dwarn"); if (w) w.hidden = sigOf(dlgCode) === dlgSig;
+}
+dlg.addEventListener("close", () => { dlgCode = ""; dlgRound = ""; });
+document.addEventListener("click", (e) => { const h = e.target.closest && e.target.closest("[data-rnd]"); if (h) openRound(h.dataset.rnd); });
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.dataset && (e.target.dataset.rnd || (e.target.dataset.act === "edit" && e.target.classList.contains("rt-r")))) { e.preventDefault(); e.target.click(); } });
 function readGame(card) { const v = card.querySelector('[data-k="pattern"]').value; return { pattern: v ? +v : null }; }
 
 // ---------- Teams tab ----------
@@ -771,7 +782,6 @@ document.addEventListener("click", (e) => {
 });
 
 // ---------- Dashboard tab ----------
-const roundTitleTh = (r) => { const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))]; return gs.length ? gs.map((g) => grpName(g)).join(" และ ") : r.key === "practice" ? "คู่ซ้อม" : r.key === "final" && r.ms.some((m) => m.stage === "third") ? "ชิงชนะเลิศและชิงที่ 3" : stageLabel(r.key); };
 function tvView() {
   const ev = event(), cur = ev.tv_mode || "auto";
   const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "คู่ทั้งรอบ แดงและน้ำเงินตามฝั่ง ผลรายเกม"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
@@ -779,7 +789,7 @@ function tvView() {
   return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
    <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>
    <div class="h2" style="margin-top:20px"><h2>รอบในตารางคู่รายรอบ</h2><span>อัตโนมัติจะแสดงรอบของคู่บนสนาม ถ้าไม่มีใช้รอบของคู่ถัดไป</span></div>
-   <div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitleTh(r)])].map(([k, t]) => `<button class="btn ${rnd === k ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${rnd === k ? "disabled" : ""}>${esc(t)}</button>`).join("")}</div>
+   <div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitle(r)])].map(([k, t]) => `<button class="btn ${rnd === k ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${rnd === k ? "disabled" : ""}>${esc(t)}</button>`).join("")}</div>
    ${adv("bk", "ขั้นสูง : ตารางสายแสดงคู่ซ้อมหรือการแข่งจริง", `<p class="muted">อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</p><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div>`)}
    <div class="btns" style="margin-top:14px"><a class="btn" href="../dashboard/" target="_blank" rel="noopener">เปิดจอ Dashboard</a></div>`;
 }

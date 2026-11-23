@@ -1,6 +1,6 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
 import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
-import { bracketHtml, fitBrackets } from "../shared/bracket.js";
+import { bracketHtml, fitBrackets, gamePills, roundTitle } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
 
@@ -82,21 +82,6 @@ function liveDrawView() {
     <div class="dn"><h2>Teams</h2>${[...names].sort((a, b) => a[0] - b[0]).map(([sd, n]) => `<div class="dn-r${n ? "" : " blank"}${fresh.has(sd) ? " dnew" : ""}"><small>${sd}</small><span>${n ? esc(n) : "..."}</span></div>`).join("")}</div></div>`;
 }
 // ---------- Game by game results and the round view ----------
-// One pill per game in play order : side colour for a won game, TIE for a replay, outline for the game being played
-function gamePills(m) {
-  return gamesOf(m.code).map((g) => {
-    if (g.status === "done" && g.winner) return `<i class="gpl ${g.winner === "red" ? "r" : "b"}">G${gameNo(m.code, g)}</i>`;
-    if (g.status === "replay") return `<i class="gpl t">TIE</i>`;
-    if (g.status === "live" || g.status === "review" || (g.status === "ready" && m.field_no != null)) return `<i class="gpl now">G${gameNo(m.code, g)}</i>`;
-    return "";
-  }).join("");
-}
-function roundTitle(r) {
-  const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))];
-  if (gs.length) return gs.map((g) => grpName(g)).join(" and ");
-  if (r.key === "final") return r.ms.some((m) => m.stage === "third") ? "Final and 3rd place" : "Final";
-  return stageLabel(r.key);
-}
 // Admin picks a round, or auto follows the match on the field, then the next match, then the last round played
 function pickRound(list) {
   const want = event().dash_layout?.rnd;
