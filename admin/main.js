@@ -853,7 +853,8 @@ const H = {
     if (await act(() => adm("a2_adm_practice", { p_matches: [], p_force: true }), "ล้างการซ้อมแล้ว") !== undefined) { await loadAll(); formTab = ""; render(); }
   },
   clearsc(b) { const tr = b.closest("tr"); tr.querySelector('[data-k="at"]').value = ""; tr.querySelector('[data-k="auto"]').checked = false; },
-  async savesc() { const items = readSchedule(); if (await act(() => adm("a2_adm_schedule", { p_items: items }), "บันทึกเวลาแล้ว") !== undefined) { formTab = ""; render(); } },
+  // Reload before redrawing : the form tab is drawn from local data, which Realtime may not have updated yet
+  async savesc() { const items = readSchedule(); if (await act(() => adm("a2_adm_schedule", { p_items: items }), "บันทึกเวลาแล้ว") !== undefined) { await loadAll().catch(() => {}); formTab = ""; render(); } },
   async tbup(b) {
     const G = b.dataset.g, s = +b.dataset.s, seeds = tableOf(G).filter((r) => r.seed != null).map((r) => r.seed), i = seeds.indexOf(s);
     if (i > 0) { [seeds[i - 1], seeds[i]] = [seeds[i], seeds[i - 1]]; await act(() => adm("a2_adm_tiebreak", { p_grp: G, p_seeds: seeds }), "ปรับลำดับแล้ว"); }
@@ -923,7 +924,7 @@ const H = {
   async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "Draw started"); formTab = ""; render(); },
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "Dashboard on Auto"); formTab = ""; render(); },
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "Dashboard mode changed"); formTab = ""; render(); },
-  async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "Bracket changed"); formTab = ""; render(); },
+  async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "Bracket changed"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "Layout saved"); },
   layreset() { lay = liveLayout(null); paintLay(); },
   layundo() { lay = liveLayout(event().dash_layout?.live); paintLay(); },
