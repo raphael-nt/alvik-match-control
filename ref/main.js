@@ -128,7 +128,8 @@ function matchView(f, m, g) {
       ${ck1("stands", `Stands placed as pattern ${g.pattern}, both sides`, "กลางแท่นตรงจุด ขอบขนานเส้นสนาม (FAQ 4)")}
       ${g.pattern ? `<img class="patbig" src="../shared/patterns/pattern${g.pattern}.png" alt="Pattern ${g.pattern}">` : ""}</section>
       <button class="btn primary huge" id="go" ${ph === "ready" && all ? "" : "disabled"}>Start</button>
-      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด แล้วเลือกเล่นต่อหรือข้าม</p>` : ""}`;
+      ${ph === "setup" ? `<p class="muted center">ปุ่ม Start กดได้เมื่อ Setup จบและติ๊กครบ แตะที่เวลาเพื่อหยุด แล้วเลือกเล่นต่อหรือข้าม</p>` : ""}
+      <div class="row"><button class="btn" id="again">Setup again ${fmtMs(event().setup_ms)}</button></div>`;
   } else if (ph === "countdown") {
     body = `<div class="count" id="count">3</div><button class="btn danger hold" data-hold="false_start">False start (hold)<i></i></button>`;
   } else if (ph === "game") {
@@ -208,6 +209,7 @@ function bindMatch(f, m, g) {
   app.querySelectorAll("[data-fl]").forEach((b) => (b.onclick = () => call("a2_ref_setup", { p_action: b.dataset.fl }).then(() => beep(660, 200)).catch(() => {})));
   app.querySelectorAll("[data-ck]").forEach((b) => (b.onchange = () => call("a2_ref_check", { p_item: b.dataset.ck, p_on: b.checked }).then((r) => { const x = field(1); if (x) x.checks = r; render(true); }).catch(() => render(true))));
   const go = $("go"); if (go) go.onclick = () => { go.disabled = true; call("a2_ref_go", {}).catch(() => {}); };
+  const ag = $("again"); if (ag) ag.onclick = setupAgain;
   const ab = $("absent"); if (ab) ab.onclick = () => { const s = prompt("ทีมที่ไม่มา พิมพ์ red หรือ blue"); if (s === "red" || s === "blue") call("a2_ref_absent", { p_side: s }).catch(() => {}); };
   const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
   app.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = async () => {
@@ -340,14 +342,19 @@ function choose(title, text, opts) {
   });
 }
 const ask = async (title, text, okLabel) => (await choose(title, text, [["1", okLabel || "ยืนยัน", true]])) === "1";
+// Restart Setup from the full time; the server clears the Pre-start checklist so it must be ticked again
+async function setupAgain() {
+  if (!(await ask("เริ่ม Setup ใหม่", `นับเวลา Setup ใหม่ ${fmtMs(event().setup_ms)} และล้าง Pre-start checklist ให้ติ๊กใหม่`, "เริ่ม Setup ใหม่"))) return;
+  call("a2_ref_setup", { p_action: "again" }).then(() => beep(660, 200)).catch(() => {});
+}
 const clockAct = (a) => call("a2_ref_clock", { p_action: a }).then(() => beep(a === "resume" ? 990 : 440, 300)).catch(() => {});
 document.addEventListener("click", async (e) => {
   if (!e.target.closest("[data-stop]") || !pin || !ctl?.control) return;
   const ck = clockV3(field(1));
   if (ck.phase === "setup" && !ck.paused) { if (await ask("หยุดเวลา Setup", "หยุดนับเวลา Setup ไว้ก่อน", "หยุดเวลา")) clockAct("pause"); }
   else if (ck.phase === "setup") {
-    const k = await choose("Setup หยุดอยู่", "เล่นต่อจากเวลาที่เหลือ หรือข้ามไปขั้น Ready", [["resume", "เล่นต่อ", true], ["skip", "ข้าม Setup"]]);
-    if (k === "resume") clockAct("resume"); else if (k === "skip") call("a2_ref_setup", { p_action: "skip" }).catch(() => {});
+    const k = await choose("Setup หยุดอยู่", "เล่นต่อจากเวลาที่เหลือ เริ่มนับใหม่ หรือข้ามไปขั้น Ready", [["resume", "เล่นต่อ", true], ["again", "เริ่ม Setup ใหม่"], ["skip", "ข้าม Setup"]]);
+    if (k === "resume") clockAct("resume"); else if (k === "again") setupAgain(); else if (k === "skip") call("a2_ref_setup", { p_action: "skip" }).catch(() => {});
   }
   else if (ck.phase === "game" && !ck.paused) { if (await ask("หยุดเวลาเกม", "หยุดเวลาไว้ก่อน กดเวลาอีกครั้งเพื่อเล่นต่อหรือจบเกม", "หยุดเวลา")) clockAct("pause"); }
   else if (ck.phase === "game") {
