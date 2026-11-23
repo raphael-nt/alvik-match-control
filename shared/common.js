@@ -119,14 +119,21 @@ export const $ = (id) => document.getElementById(id);
 
 // ---------- Clock ----------
 export const now = () => Date.now() + S.offset;
+// Server clock offset from the fastest of 5 round trips (error is at most half that round trip).
+// Runs on connect, every 60 seconds and when the page becomes visible again.
+// A new reading replaces the old one unless its round trip is much slower, so a busy moment cannot make the clock jump.
+let _syncing = false;
 export async function syncClock() {
-  let best = null;
-  for (let i = 0; i < 5; i++) {
-    const t0 = Date.now(); const { data, error } = await sb.rpc("a2_now"); const t1 = Date.now();
-    if (error || data == null) continue; const rtt = t1 - t0;
-    if (!best || rtt < best.rtt) best = { rtt, off: Number(data) - (t0 + t1) / 2 };
-  }
-  if (best) { S.offset = best.off; S.rtt = best.rtt; }
+  if (_syncing) return; _syncing = true;
+  try {
+    let best = null;
+    for (let i = 0; i < 5; i++) {
+      const t0 = Date.now(); const { data, error } = await sb.rpc("a2_now"); const t1 = Date.now();
+      if (error || data == null) continue; const rtt = t1 - t0;
+      if (!best || rtt < best.rtt) best = { rtt, off: Number(data) - (t0 + t1) / 2 };
+    }
+    if (best && (S.rtt == null || best.rtt <= Math.max(150, S.rtt * 3))) { S.offset = best.off; S.rtt = best.rtt; S.syncAt = Date.now(); paintNet(); }
+  } finally { _syncing = false; }
 }
 export function fieldLeft(f) {
   const ev = event();
@@ -186,7 +193,16 @@ function reloadDerived() {
     notify();
   }, 120);
 }
-export function paintNet() { const s = S.net; document.querySelectorAll("[data-net]").forEach((e) => { e.className = "netdot " + s; e.querySelector("b").textContent = { on: "Online", wait: "Connecting", err: "Offline" }[s]; }); }
+// Network badge, plus how far this screen's clock can be off from the server (half the best round trip)
+export function paintNet() {
+  const s = S.net, sync = S.rtt != null ? `±${Math.max(1, Math.round(S.rtt / 2))} ms` : "";
+  const tip = S.rtt != null ? `Clock offset ${Math.round(S.offset)} ms, round trip ${S.rtt} ms` : "";
+  document.querySelectorAll("[data-net]").forEach((e) => {
+    e.className = "netdot " + s; e.querySelector("b").textContent = { on: "Online", wait: "Connecting", err: "Offline" }[s];
+    const em = e.querySelector("em"); if (em && em.textContent !== sync) em.textContent = sync;
+    if (e.title !== tip) e.title = tip;
+  });
+}
 function setNet(s) { S.net = s; paintNet(); notify(); }
 export function connect() {
   // Each channel gets a generation number. Removing the old channel makes it report CLOSED,
@@ -221,7 +237,12 @@ export function connect() {
     if (S.net !== "on" || Date.now() - _lastLoad > 120000) loadAll().catch(() => {});
   }, 15000);
   setInterval(() => sb.rpc("a2_tick").then(() => {}), 8000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - _lastLoad > 15000) loadAll().catch(() => {}); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (Date.now() - _lastLoad > 15000) loadAll().catch(() => {});
+    if (S.net === "on") syncClock().catch(() => {});
+  });
+  setInterval(() => { if (!document.hidden && S.net === "on") syncClock().catch(() => {}); }, 60000);
 }
 export async function rpc(name, args) {
   const { data, error } = await sb.rpc(name, args);
@@ -236,7 +257,7 @@ export function toast(msg, bad) {
 export function beep(f = 880, ms = 160) {
   try { const a = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)()); const o = a.createOscillator(), g = a.createGain(); o.frequency.value = f; g.gain.value = 0.15; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + ms / 1000); } catch (e) {}
 }
-export const netBadge = () => `<span class="netdot wait" data-net><i></i><b>กำลังเชื่อม</b></span>`;
+export const netBadge = () => `<span class="netdot wait" data-net><i></i><b>กำลังเชื่อม</b><em></em></span>`;
 export function raf(fn) { const loop = () => { fn(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
 
 // ---------- v3 single field, central clock ----------
