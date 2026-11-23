@@ -1,5 +1,5 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
-import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, bracketMode } from "./common.js";
+import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, hasGrpLabel, bracketMode } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
 import { th } from "./lang.js";
 
@@ -161,7 +161,7 @@ function chipHtml(m, clickable) {
 function boxHtml(b, clickable, mByGrp) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
   const title = isM ? (b.m.stage === "final" ? (th() ? "ชิงชนะเลิศ" : "Final") : b.m.stage === "third" ? (th() ? "ชิงอันดับที่ 3" : "3rd place") : b.m.code) : grpName(b.g.grp);
-  const stLbl = isM ? stageLabel(b.m.stage) : stageLabel(b.g.stage);
+  const stLbl = isM ? stageLabel(b.m.stage) : hasGrpLabel(b.g.grp) ? "" : stageLabel(b.g.stage);
   const sub = isM ? `${stLbl && b.m.stage !== "final" && b.m.stage !== "third" ? stLbl + ", " : ""}Bo${b.m.bo}` : stLbl;
   const rh = rowsOf(b).map((r) => {
     const up = isM ? r.win : adv > 0 && r.sure && r.pos <= adv, out = isM ? r.lose : adv > 0 && r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);

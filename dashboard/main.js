@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { grpName, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { grpName, hasGrpLabel, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -36,7 +36,7 @@ function liveView() {
   // Team panels show the team name only
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
   const body = {
-    info: `<div class="lh"><span>${stageLabel(m.stage)}</span>${m.grp ? `<span>Group <b>${m.grp}</b></span>` : ""}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
+    info: `<div class="lh">${m.grp ? `<span><b>${esc(grpName(m.grp))}</b></span>` : `<span>${stageLabel(m.stage)}</span>`}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
     bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16 })}</div>`,
@@ -57,7 +57,7 @@ function standingsView() {
   const n = gs.length, maxT = Math.max(2, ...gs.map((g) => (g.srcs || []).length));
   const cols = n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols);
   const cellH = (940 - (rows - 1) * 18) / rows, fs = Math.max(16, Math.min(34, Math.floor((cellH - 90) / (maxT + 1) / 1.45)));
-  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>${esc(grpName(g.grp))}<span class="rnd">${stageLabel(g.stage)}</span></h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
+  return `${head("Standings")}<div class="groups" style="grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);--fs:${fs}px">${gs.map((g) => `<div class="gp"><h2>${esc(grpName(g.grp))}${hasGrpLabel(g.grp) ? "" : `<span class="rnd">${stageLabel(g.stage)}</span>`}</h2><table>${tableRows(g.grp, g.adv)}</table></div>`).join("")}</div>`;
 }
 function scheduleView() {
   const st = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
@@ -104,9 +104,11 @@ setInterval(() => { if (cur === "draw") render(); }, 800);
 
 // ---------- Clock, 3 2 1 sound and 8 second result banner ----------
 let lp = null, ls = null, lastDone = null, bnUntil = 0;
-let _ct = "", _ctCls = "", _cp = "", _cm = "", _cd = "", _bn = "", _bnMc = "", _bnGs = null;
+let _ct = "", _ctCls = "", _cp = "", _cm = "", _cd = "", _bn = "", _bnMc = "", _bnGs = null, _ctEl = null;
 raf(() => {
   const f = field(1), ct = $("ct"); if (!f || !ct) return;
+  // The live screen was redrawn : the new elements hold placeholder text, so forget what was written before
+  if (ct !== _ctEl) { _ctEl = ct; _ct = _ctCls = _cp = _cm = _cd = ""; }
   const ck = clockV3(f), sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
   const ctTxt = ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms);
   const ctCls = "t" + (ck.phase === "game" && ck.ms <= 10000 ? " warn" : ck.phase === "stopped" ? " stop" : "");

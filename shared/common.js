@@ -92,6 +92,8 @@ export const bracketMode = () => {
   return !realPlayed && prac.some((m) => m.status !== "done") ? "practice" : "comp";
 };
 export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
+// True when Admin gave the group its own name (for example Qualifying), so the round name is not shown next to it
+export const hasGrpLabel = (g) => { const l = event().format && event().format.labels; return !!(l && l[g]); };
 // Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
 export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || (th() ? "กลุ่ม " : "Group ") + g; };
 export const srcLabel = (src) => (!src ? "" : th() ? (src.seed ? "ทีมลำดับ " + src.seed : src.g ? `อันดับ ${src.p} ${grpName(src.g)}` : src.w ? "ผู้ชนะ " + src.w : src.l ? "ผู้แพ้ " + src.l : "") : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
