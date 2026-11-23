@@ -149,3 +149,18 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .dslot.full{border-style:solid}
 .dslot.ready{border-color:var(--teal)}
 .dslot.over{border-color:var(--tape);background:var(--tape-soft)}
+/* Short how-to line at the top of each tab */
+.hint{margin:0 0 14px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--teal);border-radius:var(--r-md);color:var(--ink)}
+/* Advanced options : collapsed until opened */
+.adv{margin-top:14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel)}
+.adv>summary{cursor:pointer;font-weight:600;color:var(--teal);padding:10px 14px;list-style-position:inside}
+.adv[open]>summary{border-bottom:1px solid var(--line)}
+.advb{padding:12px 14px;display:grid;gap:12px}
+.card .adv{background:transparent}
+/* Dashboard modes as a compact list of choices */
+.modes{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.mode{display:grid;gap:4px;text-align:left;padding:12px 14px;border:1px solid var(--line);border-left:6px solid var(--line);border-radius:var(--r-md);background:var(--panel);font:inherit;color:var(--ink);cursor:pointer}
+.modes .mode span{color:var(--muted);font-size:14px}
+.mode:hover:not(:disabled){border-left-color:var(--teal)}
+.mode.on{border-left-color:var(--done);cursor:default}
+.mode:focus-visible{outline:3px solid var(--teal);outline-offset:2px}

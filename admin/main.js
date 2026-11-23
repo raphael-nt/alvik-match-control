@@ -1,9 +1,8 @@
 import { setLang } from "../shared/lang.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
-import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
-import { roundList, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
+import { roundList, hasGrpLabel, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
 
 // Admin is in Thai; the Dashboard keeps English for the TV
 setLang("th");
@@ -13,13 +12,14 @@ const app = $("app"), dlg = $("dlg");
 const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} return null; };
 const lstore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
 let pw = store("a2pw") || "", authed = false, started = false, hasSetup = null;
-let tab = lstore("a2tab") || "home";
-const TABS = [["home", "ภาพรวม"], ["queue", "คิว"], ["schedule", "ตารางเวลา"], ["groups", "ตารางคะแนน"], ["matches", "รายการคู่"], ["teams", "ทีม"], ["tv", "จอ Dashboard"], ["settings", "ตั้งค่า"], ["log", "บันทึก"]];
+// Tabs merged in v4 : a tab saved under an old name opens its new home
+const OLD_TAB = { home: "field", queue: "field", matches: "field", log: "settings" };
+let tab = OLD_TAB[lstore("a2tab")] || lstore("a2tab") || "field";
+const TABS = [["field", "สนาม"], ["schedule", "ตารางแข่ง"], ["groups", "คะแนนและสาย"], ["teams", "ทีมและจับสาย"], ["tv", "จอ Dashboard"], ["settings", "ตั้งค่า"]];
 const ST_EN = { locked: "รอผล", ready: "พร้อม", queued: "บนสนาม", live: "กำลังแข่ง", done: "จบแล้ว" };
 const sideTh = (s) => (s === "red" ? "แดง" : s === "blue" ? "น้ำเงิน" : s === "both" ? "พร้อมกัน" : s || "");
 const PH_TH = { empty: "ว่าง", idle: "รอเริ่ม", setup: "Setup", ready: "พร้อม", countdown: "นับถอยหลัง", game: "กำลังแข่ง", stopped: "หยุด", over: "หมดเวลา" };
 const BK_TH = { auto: "อัตโนมัติ", practice: "คู่ซ้อม", comp: "การแข่งจริง" };
-const PANEL_TH = { info: "ข้อมูลคู่", red: "ทีมแดง", clock: "นาฬิกา", blue: "ทีมน้ำเงิน", bracket: "ตารางสาย", upnext: "คู่ถัดไป" };
 
 // ---------- Admin RPC ----------
 async function adm(name, args) {
@@ -73,39 +73,37 @@ function shell() {
   paintNet();
 }
 
+// ---------- Advanced sections ----------
+// Rarely used options sit in a collapsed section; which ones are open is kept while the tab redraws
+const ADV = new Set();
+const adv = (id, title, body) => `<details class="adv" data-adv="${id}" ${ADV.has(id) ? "open" : ""}><summary>${title}</summary><div class="advb">${body}</div></details>`;
+document.addEventListener("toggle", (e) => {
+  const d = e.target; if (!d.dataset || !d.dataset.adv) return;
+  if (d.open) ADV.add(d.dataset.adv); else ADV.delete(d.dataset.adv);
+  // A details element drawn already open also fires toggle, so the log is fetched at most every few seconds
+  if (d.open && d.dataset.adv === "log" && Date.now() - logAt > 5000) loadLog();
+}, true);
+const hint = (t) => `<p class="hint">${t}</p>`;
+
 // ---------- Render ----------
 let lastKey = "", formTab = "";
-if (!TABS.some((t) => t[0] === tab)) tab = "home";
+if (!TABS.some((t) => t[0] === tab)) tab = "field";
 const FORM_TABS = ["schedule", "teams", "settings", "tv"];   // tabs with inputs, redrawn only on tab switch or after save
 function render(force) {
   if (!authed || !S.ready) { if (authed) { const mn = $("mn"); if (mn && !mn.innerHTML) mn.innerHTML = `<p class="muted">กำลังโหลดข้อมูล</p>`; } return; }
   const ev = event(); const en = $("evn"); if (en && en.textContent !== ev.name) en.textContent = ev.name || "Alvik";
   paintNet();
-  if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); if (tab === "tv") paintLay(); } updateDlgBanner(); return; }
-  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req, m.bo, m.order_no]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], tab === "log" ? logRows.length : 0]);
+  if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); } updateDlgBanner(); return; }
+  const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req, m.bo, m.order_no]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], 0]);
   if (k === lastKey) { updateDlgBanner(); return; }
-  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "tv") paintLay(); if (tab === "queue") mountTools(); updateDlgBanner();
+  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "field") mountTools(); updateDlgBanner();
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
-// ---------- Overview tab ----------
+// ---------- Field tab helpers ----------
 const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
-function clockBox(f) {
-  const m = f && f.match_code ? match(f.match_code) : null;
-  if (!m) return `<div class="ck empty"><div class="ckh"><b>สนาม</b><span>ว่าง</span></div><div class="ckt" data-clk>1:30.0</div></div>`;
-  const g = openGame(m.code);
-  return `<div class="ck st-${m.status}"><div class="ckh"><b>${m.code}</b><span>${g ? "เกม " + gameNo(m.code, g) + " จาก " + m.bo : ""}${g?.pattern ? ", แบบสนาม " + g.pattern : ""}</span><span class="dot${refOnline(f) ? " on" : ""}" title="เครื่องกรรมการ${refOnline(f) ? "ออนไลน์" : "ออฟไลน์"}"></span></div>
-    <div class="ckv"><span class="r">${esc(sideName(m, "red"))}</span><b>${m.red_wins}-${m.blue_wins}</b><span class="b">${esc(sideName(m, "blue"))}</span></div>
-    <div class="ckt" data-clk>1:30.0</div><div class="ckp muted" data-ph></div></div>`;
-}
-function homeView() {
-  const rq = upNext().slice(0, 6).map((m) => `<div class="rq"><b>${m.code}</b><span>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</span><span class="muted">${m.sched_at ? fmtTime(m.sched_at) + (m.auto_open ? " อัตโนมัติ" : "") : ""}</span><span></span><button class="btn small primary" data-act="open" data-c="${m.code}">เรียก</button></div>`).join("") || `<p class="muted">ยังไม่มีคู่ที่พร้อม</p>`;
-  return `${alertsHtml()}<div class="home"><div class="card hbk">${bracketHtml({ clickable: true })}</div>
-    <div class="hbot"><div class="card"><div class="h2"><h2>คู่ถัดไป</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div>${clockBox(field(1))}</div></div></div>`;
-}
-
-// ---------- Things waiting for the admin, shown on top of Overview and Queue ----------
+// ---------- Things waiting for the admin, shown on top of the field tab ----------
 function alertsHtml() {
   const out = [], f = field(1), onField = f && f.match_code ? match(f.match_code) : null, ev = event();
   matches().filter((m) => m.absent_req).forEach((m) => out.push(`<div class="al warn">คู่ ${m.code} : กรรมการขอให้ฝั่ง${sideTh(m.absent_req)} (${esc(sideName(m, m.absent_req))}) แพ้บาย
@@ -122,24 +120,20 @@ function rowTools(x, f) {
   const out = [];
   if (x.status === "ready" && x.field_no == null) out.push(`<button class="btn small primary" data-act="open" data-c="${x.code}">เรียก</button>`);
   if ((x.status === "ready" || x.status === "locked") && x.field_no == null) out.push(`<button class="btn small" data-act="postpone" data-c="${x.code}" title="ย้ายไปท้ายคิว">ไว้ทีหลัง</button>`);
-  if (boEditable(x)) out.push(`<select class="sm" data-bo-code="${x.code}" title="เปลี่ยน Bo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${x.bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select>`);
-  if (x.red_seed != null && x.blue_seed != null && x.status !== "done") out.push(`<select class="sm" data-ff-code="${x.code}" title="ทีมไม่มา"><option value="">ทีมไม่มา...</option><option value="red">${esc(sideName(x, "red"))} ไม่มา</option><option value="blue">${esc(sideName(x, "blue"))} ไม่มา</option></select>`);
-  if (x.forfeit) out.push(`<button class="btn small" data-act="ffundo" data-c="${x.code}">ยกเลิกแพ้บาย</button>`);
-  out.push(`<button class="btn small" data-act="edit" data-c="${x.code}">เปิด</button>`);
+  out.push(`<button class="btn small" data-act="edit" data-c="${x.code}">${x.status === "done" ? "ดูหรือแก้ผล" : "เปิด"}</button>`);
   return out.join(" ");
 }
 // On-site tools card. Kept as one DOM node so typing is not lost when live data redraws the Queue tab
 let toolsEl = null;
 function toolsHtml() {
   const ev = event(), t = teamsArr(), left = (sd) => matches().filter((m) => m.status !== "done" && (m.red_seed === sd || m.blue_seed === sd)).length;
-  return `<div class="card tools"><div class="h2"><h2>เครื่องมือหน้างาน</h2></div>
-    <div class="tl"><b>เปลี่ยน Bo คู่ที่ยังไม่เริ่มทั้งหมด</b><span class="muted">ใช้เมื่อเวลาไม่พอ คู่ที่เริ่มแข่งแล้วไม่เปลี่ยน</span>
+  return `<div class="card tools"><div class="tl"><b>ประกาศบนจอ Dashboard</b><span class="muted">${ev.notice_on && ev.notice ? "ตอนนี้แสดงอยู่ เป็นแถบด้านบนของทุกหน้าจอ" : "ตอนนี้ไม่ได้แสดง พิมพ์ข้อความแล้วกดแสดง"}</span>
+      <div class="row"><input id="ntext" maxlength="200" placeholder="เช่น พักเที่ยง กลับมาแข่ง 13:00" value="${esc(ev.notice || "")}"><button class="btn primary" data-act="noticeshow">แสดง</button><button class="btn" data-act="noticehide">ซ่อน</button></div></div>
+    ${adv("tools", "ขั้นสูง : เปลี่ยน Bo ทั้งหมด และทีมถอนตัว", `<div class="tl"><b>เปลี่ยน Bo คู่ที่ยังไม่เริ่มทั้งหมด</b><span class="muted">ใช้เมื่อเวลาไม่พอ คู่ที่เริ่มแข่งแล้วไม่เปลี่ยน เปลี่ยนทีละคู่ได้ในปุ่มเปิดของคู่นั้น</span>
       <div class="row"><select id="boall">${[1, 3, 5, 7].map((n) => `<option value="${n}">Bo${n}</option>`).join("")}</select><button class="btn" data-act="boall">เปลี่ยนทั้งหมด</button></div></div>
     <div class="tl"><b>ทีมถอนตัว หรือกลับมาแข่ง</b><span class="muted">ถอนตัว : คู่ที่เหลือของทีมนี้แพ้บายทั้งหมด กลับมาแข่ง : ยกเลิกแพ้บายของคู่ที่ยังไม่จบ</span>
       <div class="row"><select id="wdteam">${t.map((x) => `<option value="${x.seed}">${esc(teamName(x.seed))}${x.absent ? " (ถอนตัวอยู่)" : ""} เหลือ ${left(x.seed)} คู่</option>`).join("")}</select>
-      <button class="btn danger" data-act="withdraw">ถอนตัว</button><button class="btn" data-act="comeback">กลับมาแข่ง</button></div></div>
-    <div class="tl"><b>ประกาศบนจอ Dashboard</b><span class="muted">${ev.notice_on && ev.notice ? "ตอนนี้แสดงอยู่" : "ตอนนี้ไม่ได้แสดง"}</span>
-      <div class="row"><input id="ntext" maxlength="200" placeholder="เช่น พักเที่ยง กลับมาแข่ง 13:00" value="${esc(ev.notice || "")}"><button class="btn primary" data-act="noticeshow">แสดง</button><button class="btn" data-act="noticehide">ซ่อน</button></div></div></div>`;
+      <button class="btn danger" data-act="withdraw">ถอนตัว</button><button class="btn" data-act="comeback">กลับมาแข่ง</button></div></div>`)}</div>`;
 }
 function mountTools() {
   const host = $("qtools"); if (!host) return;
@@ -148,7 +142,7 @@ function mountTools() {
 }
 const refreshTools = () => { if (toolsEl) toolsEl.innerHTML = toolsHtml(); };
 
-// ---------- Queue tab (single queue, single field) ----------
+// ---------- Field tab : the match on the field, the queue, announcements ----------
 function flowBtns(f) {
   const b = (a, t, c = "") => `<button class="btn ${c}" data-act="timer" data-a="${a}">${t}</button>`;
   const ph = f.phase;
@@ -158,7 +152,7 @@ function flowBtns(f) {
   if (ph === "countdown" || ph === "game") return b("false_start", "ออกตัวก่อน (False start)", "danger");
   return "";
 }
-function queueView() {
+function fieldView() {
   const f = field(1), m = f && f.match_code ? match(f.match_code) : null, nx = upNext();
   let card;
   if (!m) card = `<div class="card fc"><div class="h2"><h2>บนสนาม</h2><span>ว่าง</span></div>
@@ -166,7 +160,7 @@ function queueView() {
   else {
     const g = openGame(m.code), done = m.status === "done", c = f.checks || {};
     card = `<div class="card fc st-${m.status}"><div class="h2"><h2>บนสนาม  ${m.code}</h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><span>เครื่องกรรมการ${refOnline(f) ? "ออนไลน์" : "ออฟไลน์"}</span></div>
-      <div class="vs"><span>${stageLabel(m.stage)}${m.grp ? " " + esc(grpName(m.grp)) : ""}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
+      <div class="vs"><span>${m.grp ? esc(grpName(m.grp)) : stageLabel(m.stage)}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
       <div class="muted">${done ? "จบคู่แล้ว ผู้ชนะ " + esc(teamName(m.winner_seed)) : (g ? "เกม " + gameNo(m.code, g) + " จาก " + m.bo : "") + (g?.pattern ? ", แบบสนาม " + g.pattern : ", ยังไม่เลือกแบบสนาม")}${!done && ["setup", "ready"].includes(f.phase) ? `, Checklist ${["red_in", "blue_in", "stands"].filter((k) => c[k]).length}/3` : ""}</div>
       <div class="t" data-clk>1:30.0</div><div class="muted" data-ph></div>
       <div class="btns">${done ? (nx.length ? `<button class="btn primary" data-act="open" data-c="${nx[0].code}">เรียกคู่ถัดไป ${nx[0].code}</button>` : "") : flowBtns(f)}
@@ -175,7 +169,7 @@ function queueView() {
   }
   const rows = matches().map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
-  return `${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว เปลี่ยน Bo ได้จนกว่าคู่นั้นจะเริ่มแข่ง</span></div><div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป กรรมการเลือกแบบสนาม เริ่ม Setup และกดผลในมือถือ ผลขึ้นเองเมื่อกรรมการรับรอง แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว</span></div><div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 // ---------- Schedule tab ----------
@@ -221,23 +215,17 @@ function scheduleView() {
   if (!sc.pday) sc.pday = pfirst ? dayOf(pfirst.sched_at) : todayStr();
   const stages = stagesInUse(), present = practiceTeams(), nT = present.length;
   const prows = pracMatches().map((m) => `<tr><td><b>${m.code}</b></td><td>${m.sched_at ? hm(m.sched_at) : ""}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td></tr>`).join("");
-  return `<div class="h2"><h2>ตารางเวลา</h2><span>จัดเวลาแข่งและวันซ้อม เวลาพักไม่นับเป็นเวลาคิว พิมพ์หรือบันทึกเป็น PDF ได้</span></div>
-   <div class="card tools sched"><div class="tl"><b>ตารางแข่ง</b>
-     <div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
-       <label>วันแข่ง<input type="date" data-sc="day" value="${sc.day}"></label><label>เวลาเริ่มคู่แรก<input type="time" data-sc="start" value="${sc.start}"></label>
+  const tbl = `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>รอบ</th><th>ทีม</th><th>เวลา</th><th>เรียกอัตโนมัติ</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(m.grp ? grpName(m.grp) : stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
+     <td>${m.status === "done" ? `<span class="muted">${hm(m.sched_at)} จบแล้ว</span>` : `<input type="time" data-k="at" value="${hm(m.sched_at)}">`}</td>
+     <td>${m.status === "done" ? "" : `<input type="checkbox" data-k="auto" ${m.auto_open ? "checked" : ""} aria-label="เปิดอัตโนมัติ ${m.code}">`}</td><td>${m.sched_at && m.status !== "done" ? `<button class="btn small" data-act="clearsc">ล้าง</button>` : ""}</td></tr>`).join("")}</tbody></table></div>`;
+  const autoHtml = `<div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+       <label>เวลาเริ่มคู่แรก<input type="time" data-sc="start" value="${sc.start}"></label>
        ${stages.map((st) => `<label>${esc(stageLabel(st))} (นาทีต่อคู่)<input type="number" min="1" value="${minOf(st)}" data-scmin="${st}"></label>`).join("")}
        <label>เรียกขึ้นสนามเองเมื่อถึงเวลา<select data-sc="auto"><option value="1" ${sc.auto ? "selected" : ""}>เปิด</option><option value="0" ${sc.auto ? "" : "selected"}>ปิด</option></select></label></div>
-     <div class="row"><button class="btn primary" data-act="autofill">จัดเวลาอัตโนมัติ</button><span class="muted">นาทีต่อคู่รวมเวลาเปลี่ยนคู่แล้ว เติมลงตารางด้านล่าง ตรวจแล้วกดบันทึกเวลา</span></div></div>
-     ${breaksHtml()}</div>
-   <div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>รอบ</th><th>ทีม</th><th>เวลา</th><th>เรียกอัตโนมัติ</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
-     <td>${m.status === "done" ? `<span class="muted">${hm(m.sched_at)} จบแล้ว</span>` : `<input type="time" data-k="at" value="${hm(m.sched_at)}">`}</td>
-     <td>${m.status === "done" ? "" : `<input type="checkbox" data-k="auto" ${m.auto_open ? "checked" : ""} aria-label="เปิดอัตโนมัติ ${m.code}">`}</td><td>${m.sched_at && m.status !== "done" ? `<button class="btn small" data-act="clearsc">ล้าง</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
-   <div class="btns"><button class="btn primary" data-act="savesc">บันทึกเวลา</button><select id="pdfstage" class="sm"><option value="">ทุกรอบ</option>${stages.map((st) => `<option value="${esc(st)}">${esc(stageLabel(st))}</option>`).join("")}</select>
-     <label class="chk2"><input type="checkbox" id="pdfnp">ขึ้นหน้าใหม่ทุกรอบ</label><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
-
-   <div class="h2" style="margin-top:26px"><h2>วันซ้อม</h2><span>จับคู่ซ้อมแข่งจริง กรรมการใช้หน้าเดิม ผลไม่นับเข้าตารางคะแนนหรือสายแข่ง</span></div>
-   <div class="card tools sched"><div class="tl">
-     <div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+     <div class="row"><button class="btn" data-act="autofill">จัดเวลาอัตโนมัติ</button><span class="muted">เติมเวลาลงตารางด้านบน นาทีต่อคู่รวมเวลาเปลี่ยนคู่แล้ว ตรวจแล้วกดบันทึกเวลา</span></div>
+     ${breaksHtml()}
+     <label class="chk2"><input type="checkbox" id="pdfnp">PDF ขึ้นหน้าใหม่ทุกรอบ</label>`;
+  const pracHtml = `<div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
        <label>วันซ้อม<input type="date" data-sc="pday" value="${sc.pday}"></label><label>เวลาเริ่ม<input type="time" data-sc="pstart" value="${sc.pstart}"></label>
        <label>ทีมละกี่คู่<input type="number" min="1" max="${Math.max(1, nT - 1)}" value="${sc.pgames}" data-sc="pgames"></label>
        <label>Bo<select data-sc="pbo">${[1, 3, 5].map((n) => `<option value="${n}" ${+sc.pbo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>
@@ -245,8 +233,16 @@ function scheduleView() {
      <div class="tl"><b>ทีมที่มาซ้อม</b><span class="muted">เอาติ๊กออกถ้าทีมไม่มา จะจับคู่เฉพาะทีมที่มา (ไม่กระทบการแข่งจริง)</span>
        <div class="pteams">${teamsArr().map((t) => `<label class="chk2"><input type="checkbox" data-pteam="${t.seed}" ${(sc.pabsent || []).includes(t.seed) ? "" : "checked"}>${esc(teamName(t.seed))}</label>`).join("")}</div></div>
      <div class="row"><span class="muted">${nT} ทีม ทีมละ ${sc.pgames} คู่ รวม ${(nT * sc.pgames) % 2 ? "ไม่ลงตัว (จำนวนทีม × คู่ ต้องเป็นเลขคู่)" : (nT * sc.pgames) / 2 + " คู่"}</span></div>
-     <div class="row"><button class="btn primary" data-act="pracgen">สุ่มคู่ซ้อมและจัดเวลา</button><button class="btn" data-act="pdfprac" ${prows ? "" : "disabled"}>พิมพ์ / PDF ตารางซ้อม</button><button class="btn danger" data-act="pracclear" ${prows ? "" : "disabled"}>ล้างการซ้อม</button></div></div></div>
-   ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>เวลา</th><th>ทีม</th><th>Bo</th><th>สถานะ</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม</p>`}`;
+     <div class="row"><button class="btn" data-act="pracgen">สุ่มคู่ซ้อมใหม่และจัดเวลา</button><button class="btn danger" data-act="pracclear" ${prows ? "" : "disabled"}>ล้างการซ้อม</button></div>`;
+  return `${hint("แก้เวลาของแต่ละคู่ในตาราง แล้วกดบันทึกเวลา คู่ที่ติ๊กเรียกอัตโนมัติจะขึ้นสนามเองเมื่อถึงเวลา ถ้าสนามว่าง")}
+   <div class="h2"><h2>ตารางแข่ง</h2><label class="muted">วันแข่ง <input type="date" data-sc="day" value="${sc.day}"></label></div>
+   ${tbl}
+   <div class="btns"><button class="btn primary" data-act="savesc">บันทึกเวลา</button><select id="pdfstage" class="sm"><option value="">ทุกรอบ</option>${stages.map((st) => `<option value="${esc(st)}">${esc(stageLabel(st))}</option>`).join("")}</select><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
+   ${adv("sched", "ขั้นสูง : จัดเวลาอัตโนมัติ ช่วงพัก และการพิมพ์", autoHtml)}
+   <div class="h2" style="margin-top:26px"><h2>วันซ้อม</h2><span>คู่ซ้อมใช้หน้ากรรมการเดิม ผลไม่นับเข้าตารางคะแนนหรือสายแข่ง</span></div>
+   ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>เวลา</th><th>ทีม</th><th>Bo</th><th>สถานะ</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม เปิดขั้นสูงด้านล่างเพื่อสุ่มคู่ซ้อม</p>`}
+   <div class="btns"><button class="btn" data-act="pdfprac" ${prows ? "" : "disabled"}>พิมพ์ / PDF ตารางซ้อม</button></div>
+   ${adv("prac", "ขั้นสูง : สุ่มคู่ซ้อมใหม่", pracHtml)}`;
 }
 function readSchedule() {
   const day = sc.day || todayStr(), out = [];
@@ -297,18 +293,15 @@ function printSchedule(title, list, day, newPage) {
 // ---------- Standings tab ----------
 function groupsView() {
   const n = groups().length || 1, cols = innerWidth < 760 ? 1 : n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4;
-  return `<div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${groups().map((gr) => { const G = gr.grp;
+  return `${hint("ตารางสายและอันดับคำนวณเองจากผล กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล ถ้ามีทีมเสมอทุกเกณฑ์ให้กดขึ้นเพื่อจัดลำดับ")}<div class="card hbk">${bracketHtml({ clickable: true })}</div>
+  <div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr));margin-top:14px">${groups().map((gr) => { const G = gr.grp;
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
-    return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${stageLabel(gr.stage)} เข้ารอบ ${gr.adv} ทีม</span></div>
+    return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${hasGrpLabel(G) ? "" : stageLabel(gr.stage) + " "}เข้ารอบ ${gr.adv} ทีม</span></div>
       <div class="tw"><table class="tbl"><thead><tr><th>#</th><th>ทีม</th><th class="num">ชนะ-แพ้</th><th class="num">เกม</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
         <td>${r.tied && i > 0 && rows[i - 1].tied && r.seed != null ? `<button class="btn small" data-act="tbup" data-g="${G}" data-s="${r.seed}">ขึ้น</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${tiedAny ? `<div class="warn">มีทีมเสมอกันทุกเกณฑ์ กดขึ้นเพื่อให้ทีมนั้นอยู่เหนือทีมข้างบน</div>` : ""}${tb ? `<div class="btns"><button class="btn small" data-act="tbclear" data-g="${G}">ล้างการตัดสินลำดับ</button></div>` : ""}</div>`;
   }).join("")}</div>`;
 }
-
-// ---------- Matches tab ----------
-const matchesView = () => `<div class="h2"><h2>รายการคู่</h2><span>แก้ผลรายเกมได้ทุกคู่ แม้จบแล้ว ระบบคำนวณอันดับและผู้ชนะใหม่ให้เอง</span></div>
-  <div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>รอบ</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th></th></tr></thead><tbody>${matches().map((m) => `<tr><td><b>${m.code}</b></td><td>${stageLabel(m.stage)}${m.grp ? " สาย " + m.grp : ""} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td class="num">${m.red_wins}-${m.blue_wins}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td><td><button class="btn small" data-act="edit" data-c="${m.code}">เปิด</button></td></tr>`).join("")}</tbody></table></div>`;
 
 // ---------- Match dialog ----------
 let dlgCode = "", dlgSig = "";
@@ -338,7 +331,7 @@ function dlgHtml(code) {
   return `<div class="dh"><h2>คู่ ${m.code}  ${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}  <span class="muted">${m.red_wins}-${m.blue_wins}</span></h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><button class="btn" data-act="dclose">ปิด</button></div>
    <div class="db">${m.walkover ? `<div class="warn">ชนะบาย ${esc(sideName(m, m.walkover === "red" ? "blue" : "red"))} ชนะ เพราะ ${esc(sideName(m, m.walkover))} ไม่มา ${m.forfeit ? "" : "(ตั้งทีมนี้เป็นไม่มาไว้ในแท็บทีม)"}</div>` : ""}<div class="warn" id="dwarn" hidden>ข้อมูลคู่นี้เพิ่งเปลี่ยนจากที่อื่น <button class="btn small" data-act="dreload">โหลดใหม่</button> </div>
    ${gs.length ? gs.map((g) => gameBlock(m, g)).join("") : `<p class="muted">ยังไม่มีเกมในคู่นี้ ${m.status === "locked" ? "คู่นี้ยังรอผลคู่ก่อนหน้า" : "เกมแรกจะถูกสร้างตอนเปิดคิว หรือกดเพิ่มเกมด้านล่าง"}</p>`}
-   <div class="btns"><button class="btn" data-act="gadd" ${m.status === "locked" ? "disabled" : ""}>เพิ่มเกม</button>${!gs.length && m.status !== "done" ? `<button class="btn" data-act="swap">สลับฝั่ง</button>` : ""}
+   <div class="btns">${boEditable(m) ? `<label class="muted">Bo <select class="sm" data-bo-code="${m.code}" title="เปลี่ยน Bo คู่นี้">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${m.bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label>` : ""}<button class="btn" data-act="gadd" ${m.status === "locked" ? "disabled" : ""}>เพิ่มเกม</button>${!gs.length && m.status !== "done" ? `<button class="btn" data-act="swap">สลับฝั่ง</button>` : ""}
    ${(m.red_seed != null && m.blue_seed != null && m.status !== "done") || m.forfeit ? ["red", "blue"].map((sd) => `<button class="btn danger" data-act="ff" data-s="${sd}">${esc(sideName(m, sd))} ไม่มา (แพ้บาย)</button>`).join("") : ""}${m.forfeit ? `<button class="btn" data-act="ff" data-s="">ยกเลิกแพ้บาย</button>` : ""}
    ${m.status === "ready" && free ? `<button class="btn primary" data-act="open" data-c="${m.code}" data-keep="1">เรียกขึ้นสนาม</button>` : ""}</div></div>`;
 }
@@ -640,16 +633,16 @@ function fmtCard(played) {
 }
 function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) { el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}))); const n = document.querySelector(".fmtc"); if (n) fitBrackets(n); } }
 function teamsView() {
-  const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}));
+  const t = teamsArr(), played = [...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}));
   const r1 = groups().filter((g) => g.stage === "r1" && g.srcs?.every((x) => x && x.seed != null));
   const cols = r1.length ? r1 : [{ grp: "", srcs: t.map((x) => ({ seed: x.seed })) }];
-  return `<div class="h2"><h2>รูปแบบการแข่ง</h2><span>เพิ่มหรือลดรอบกลุ่ม ปรับขนาดแต่ละกลุ่มไม่เท่ากันได้ แก้สายการแข่งได้ทุกรอบ หรือกำหนดแมตช์เองทั้งหมด</span></div>
-   ${fmtCard(played)}
-   <div class="h2" style="margin-top:20px"><h2>ทีม</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง กดสุ่มลำดับเพื่อจับสาย</span></div>
+  return `${hint("แก้ชื่อทีมแล้วกดบันทึก เลขหน้าชื่อคือหมายเลขทีมที่ผูกกับคู่แข่งแล้ว ติ๊กไม่มาถ้าทีมไม่มาทั้งงาน ทุกคู่ของทีมนั้นจะแพ้บาย")}
+   <div class="h2"><h2>ทีม</h2></div>
    <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? esc(grpName(g.grp)) : "ทีม (ตามลำดับ)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="ทีม ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>ไม่มา</label></div>`; }).join("")}</div>`).join("")}</div>
-   <div class="btns"><button class="btn primary" data-act="saveteams">บันทึกชื่อทีม</button><button class="btn" data-act="shuffle">สุ่มลำดับ</button></div>
-   <div class="h2" style="margin-top:24px"><h2>จับสายสด</h2><span>${isLiveDraw() ? "กำลังจับสาย ลากชื่อไปวางที่หมายเลข หรือแตะชื่อแล้วแตะหมายเลข จอ Dashboard ขึ้นชื่อทันที" : draw ? "จอ Dashboard อยู่ในโหมดจับสาย" : "เตรียมรายชื่อไว้ก่อน กดเริ่มแล้วค่อยวางชื่อทีละทีมระหว่างงาน"}</span></div>
-   ${drawPanel()}`;
+   <div class="btns"><button class="btn primary" data-act="saveteams">บันทึกชื่อทีม</button></div>
+   <div class="h2" style="margin-top:24px"><h2>จับสายสด</h2><span>${isLiveDraw() ? "กำลังจับสาย ลากชื่อไปวางที่หมายเลข หรือแตะชื่อแล้วแตะหมายเลข จอ Dashboard ขึ้นชื่อทันที" : "เตรียมรายชื่อไว้ก่อน กดเริ่มแล้วค่อยวางชื่อทีละทีมระหว่างงาน"}</span></div>
+   ${drawPanel()}
+   ${adv("format", "ขั้นสูง : รูปแบบการแข่งและสุ่มลำดับทีม (ตั้งไว้แล้ว ไม่ต้องแก้ระหว่างงาน)", `<div class="btns"><button class="btn" data-act="shuffle">สุ่มลำดับทีม</button><span class="muted">สลับชื่อทีมกับหมายเลขแบบสุ่ม ใช้แทนการจับสายสดได้</span></div>${fmtCard(played)}`)}`;
 }
 
 // ---------- Live draw ----------
@@ -713,90 +706,45 @@ document.addEventListener("click", (e) => {
 // ---------- Dashboard tab ----------
 const roundTitleTh = (r) => { const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))]; return gs.length ? gs.map((g) => grpName(g)).join(" และ ") : r.key === "practice" ? "คู่ซ้อม" : r.key === "final" && r.ms.some((m) => m.stage === "third") ? "ชิงชนะเลิศและชิงที่ 3" : stageLabel(r.key); };
 function tvView() {
-  lay = liveLayout(event().dash_layout?.live);
-  const ev = event(), M = [["auto", "อัตโนมัติ", "มีคู่บนสนามใช้หน้าถ่ายทอดสด ไม่มีใช้ตารางสาย จบคู่ชิงขึ้นหน้าแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "ตารางคะแนนทุกสาย"], ["schedule", "ตารางเวลา", "ลำดับคู่ เวลานัด สถานะ"], ["rounds", "ตารางคู่รายรอบ", "คู่ทั้งหมดของรอบเดียว แดงและน้ำเงินตามฝั่ง พร้อมผลรายเกม"], ["draw", "จับสาย", "เผยชื่อทีมทีละทีม หรือตารางจับสายสด"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
-  return `<div class="h2"><h2>โหมดจอ Dashboard</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้อัตโนมัติ</span></div>
-   <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>ใช้</button></div>`).join("")}</div>
-   <div class="h2" style="margin-top:22px"><h2>รอบในตารางคู่รายรอบ</h2><span>อัตโนมัติจะแสดงรอบของคู่บนสนาม ถ้าไม่มีใช้รอบของคู่ถัดไป</span></div>
-   <div class="card"><div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitleTh(r)])].map(([k, t]) => { const on = (ev.dash_layout?.rnd || "auto") === k; return `<button class="btn ${on ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${on ? "disabled" : ""}>${esc(t)}</button>`; }).join("")}</div></div>
-   <div class="h2" style="margin-top:22px"><h2>ตารางสายแสดง</h2><span>ใช้กับตารางสายทุกจอ อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</span></div>
-   <div class="card"><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div></div>
-   <div class="h2" style="margin-top:22px"><h2>ผังจอถ่ายทอดสด</h2><span>ลากเพื่อย้าย ลากมุมขวาล่างเพื่อลดขยาย ติ๊กเพื่อซ่อนหรือแสดง แล้วกดบันทึกผัง</span></div>
-   <div class="card"><div class="layc">${PANELS.map(([k, t]) => `<label class="chk2"><input type="checkbox" data-layon="${k}" ${lay[k].on ? "checked" : ""}>${PANEL_TH[k] || t}</label>`).join("")}</div>
-     <div class="lay" id="lay"></div>
-     <div class="btns"><button class="btn primary" data-act="laysave">บันทึกผัง</button><button class="btn" data-act="layundo">ยกเลิกการแก้</button><button class="btn" data-act="layreset">กลับค่าเริ่มต้น</button><a class="btn" href="../dashboard/" target="_blank" rel="noopener">เปิดจอ Dashboard</a></div></div>`;
+  const ev = event(), cur = ev.tv_mode || "auto";
+  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "คู่ทั้งรอบ แดงและน้ำเงินตามฝั่ง ผลรายเกม"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  const rnd = ev.dash_layout?.rnd || "auto";
+  return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
+   <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>
+   <div class="h2" style="margin-top:20px"><h2>รอบในตารางคู่รายรอบ</h2><span>อัตโนมัติจะแสดงรอบของคู่บนสนาม ถ้าไม่มีใช้รอบของคู่ถัดไป</span></div>
+   <div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitleTh(r)])].map(([k, t]) => `<button class="btn ${rnd === k ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${rnd === k ? "disabled" : ""}>${esc(t)}</button>`).join("")}</div>
+   ${adv("bk", "ขั้นสูง : ตารางสายแสดงคู่ซ้อมหรือการแข่งจริง", `<p class="muted">อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</p><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div>`)}
+   <div class="btns" style="margin-top:14px"><a class="btn" href="../dashboard/" target="_blank" rel="noopener">เปิดจอ Dashboard</a></div>`;
 }
-// ---------- Live layout editor ----------
-let lay = null, drag = null;
-const LAB = Object.fromEntries(PANELS);
-// Sample content per panel so the editor shows what the Live screen will contain (follows rules mode)
-function layMock(k) {
-  const rules = event().rules_mode !== false;
-  const tm = (s, n) => `<div class="mk-t ${s === "red" ? "side-r" : "side-b"}"><div class="n">${n}</div></div>`;
-  return {
-    info: `<div class="mk-i"><span>Group stage</span><span>Group <b>A</b></span><span>Match <b>A1</b></span><span>Game <b>1 of 3</b></span>${rules ? `<span>Pattern <b>2</b></span>` : ""}</div>`,
-    red: tm("red", "Sample Team A"), blue: tm("blue", "Sample Team B"),
-    clock: `<div class="mk-c">${rules ? `<div class="t">1:30.0</div><div class="p">Running</div>` : `<div class="t">1-0</div><div class="p">Game 1 of 3</div>`}</div>`,
-    bracket: `<div class="mk-b">${bracketHtml({ dark: true, compact: true })}</div>`,
-    upnext: `<div class="mk-u"><h3>Up next</h3><div><b>A2</b><span>Team C vs Team D</span></div><div><b>B1</b><span>Team E vs Team F</span></div><div><b>B2</b><span>Team G vs Team H</span></div></div>`,
-  }[k];
-}
-function paintLay() {
-  const el = $("lay"); if (!el || !lay) return;
-  el.innerHTML = PANELS.filter(([k]) => lay[k].on).map(([k]) => { const p = lay[k];
-    return `<div class="lbx lbx-${k}" data-lk="${k}" style="left:${(p.x / STAGE.w) * 100}%;top:${(p.y / STAGE.h) * 100}%;width:${(p.w / STAGE.w) * 100}%;height:${(p.h / STAGE.h) * 100}%">${layMock(k)}<div class="ltag"><b>${PANEL_TH[k] || LAB[k]}</b><span>${p.w}×${p.h}</span></div><i data-rs="${k}" title="ปรับขนาด"></i></div>`; }).join("") + `<div class="lhead">หัวจอ (คงที่)</div>`;
-  el.style.setProperty("--sc", el.clientWidth / STAGE.w); fitLayBracket();
-  document.querySelectorAll("[data-layon]").forEach((c) => (c.checked = lay[c.dataset.layon].on));
-}
-// Real bracket scaled the same way the Dashboard does: fit the panel width and height (minus 8px padding each side)
-function fitLayBracket() {
-  const el = $("lay"), bk = el && el.querySelector(".mk-b [data-bk]"); if (!bk) return;
-  bk.dataset.maxh = Math.max(1, (lay.bracket.h - 16) * (el.clientWidth / STAGE.w)); fitBrackets(el);
-}
-document.addEventListener("pointerdown", (e) => {
-  const box = e.target.closest("[data-lk]"); if (!box || !lay) return;
-  const k = box.dataset.lk, rect = $("lay").getBoundingClientRect(), sc = rect.width / STAGE.w;
-  drag = { k, rs: !!e.target.closest("[data-rs]"), sx: e.clientX, sy: e.clientY, o: { ...lay[k] }, sc, el: box };
-  box.setPointerCapture(e.pointerId); e.preventDefault();
-});
-document.addEventListener("pointermove", (e) => {
-  if (!drag) return;
-  const snap = (v) => Math.round(v / 10) * 10, dx = (e.clientX - drag.sx) / drag.sc, dy = (e.clientY - drag.sy) / drag.sc, o = drag.o, p = lay[drag.k];
-  if (drag.rs) { p.w = Math.max(80, Math.min(STAGE.w - o.x, snap(o.w + dx))); p.h = Math.max(40, Math.min(STAGE.h - o.y, snap(o.h + dy))); }
-  else { p.x = Math.max(0, Math.min(STAGE.w - o.w, snap(o.x + dx))); p.y = Math.max(0, Math.min(STAGE.h - o.h, snap(o.y + dy))); }
-  const st = drag.el.style; st.left = (p.x / STAGE.w) * 100 + "%"; st.top = (p.y / STAGE.h) * 100 + "%"; st.width = (p.w / STAGE.w) * 100 + "%"; st.height = (p.h / STAGE.h) * 100 + "%";
-  drag.el.querySelector(".ltag span").textContent = p.w + "×" + p.h;
-  if (drag.k === "bracket" && drag.rs) fitLayBracket();
-});
-document.addEventListener("pointerup", () => (drag = null));
-document.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.layon && lay) { lay[e.target.dataset.layon].on = e.target.checked; paintLay(); } });
-
 
 // ---------- Settings tab ----------
 function settingsView() {
   const ev = event(), base = new URL("../", location.href).href;
   const link = (p, t, d) => `<div class="lk"><div data-qr="${base}${p}/"></div><div><b>${t}</b><div class="muted">${d}</div><code>${base}${p}/</code><div class="btns"><button class="btn small" data-act="copy" data-u="${base}${p}/">คัดลอกลิงก์</button><a class="btn small" style="text-decoration:none" href="${base}${p}/" target="_blank" rel="noopener">เปิด</a></div></div></div>`;
-  return `<div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>ชื่องาน</h2></div><div class="form">
-     <label>ชื่องาน แสดงบนหัว Dashboard และหน้าแอดมิน<input id="en" value="${esc(ev.name)}" maxlength="80"></label>
+  const rulesHtml = `<p class="muted" style="margin:0 0 10px">${ev.rules_mode !== false ? "เปิดอยู่ : กรรมการใช้ Setup, Checklist, นาฬิกา และกดเกณฑ์ตามกติกาข้อ 6 (งานนี้ใช้แบบนี้)" : "ปิดอยู่ : กรรมการกดแค่ว่าใครชนะแต่ละเกม ไม่มีนาฬิกาและ Checklist"}</p>
+     <label class="switch"><input type="checkbox" id="rm" ${ev.rules_mode !== false ? "checked" : ""}><span></span><b>ใช้กติกา Smart Logistics Challenge</b></label>`;
+  const dataHtml = `<div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
+     <div class="form" style="margin-top:14px"><label>ล้างเฉพาะผลการแข่ง เก็บชื่อทีม ตารางคู่ และเวลานัดไว้ ใช้หลังกดลองระบบ<select id="rrs"><option value="all">ทุกคู่ (คู่ซ้อมและคู่แข่งจริง)</option><option value="practice">เฉพาะคู่ซ้อม</option><option value="comp">เฉพาะคู่แข่งจริง</option></select></label><button class="btn" data-act="resetres">ล้างเฉพาะผล</button></div>
+     <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ แต่เวลานัดทุกคู่จะถูกล้าง</span></div>`;
+  return `${hint("ตั้งครั้งเดียวก่อนงาน : ชื่องาน เวลาในเกม เอกสารกติกา และส่งลิงก์ให้เครื่องกรรมการกับจอ Dashboard")}
+   <div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>ชื่องาน</h2></div><div class="form">
+     <label>แสดงบนหัวจอ Dashboard และหน้าแอดมิน<input id="en" value="${esc(ev.name)}" maxlength="80"></label>
      <button class="btn primary" data-act="savename">บันทึกชื่อ</button></div></div>
-    <div class="card"><div class="h2"><h2>โหมดกติกา Smart Logistics Challenge</h2><span class="pill ${ev.rules_mode !== false ? "ready" : "locked"}">${ev.rules_mode !== false ? "เปิด" : "ปิด"}</span></div>
-     <p class="muted" style="margin:0 0 10px">${ev.rules_mode !== false ? "เปิด : กรรมการใช้ Setup, Checklist, นาฬิกา 1:30 และกดเกณฑ์ตามกติกาข้อ 6" : "ปิด : กรรมการกดแค่ว่าใครชนะแต่ละเกม ไม่มีนาฬิกาและ Checklist"}</p>
-     <label class="switch"><input type="checkbox" id="rm" ${ev.rules_mode !== false ? "checked" : ""}><span></span><b>ใช้กติกา Smart Logistics Challenge</b></label></div>
-    <div class="card"><div class="h2"><h2>เวลา</h2><span>ใช้เมื่อเปิดโหมดกติกา</span></div><div class="form">
+    <div class="card"><div class="h2"><h2>เวลาในเกม</h2><span>กติกางานนี้ Setup 60 วินาที แข่ง 90 วินาที</span></div><div class="form">
      <div class="two"><label>เวลา Setup (วินาที)<input id="es" type="number" min="0" value="${Math.round(ev.setup_ms / 1000)}"></label><label>เวลาแข่งต่อเกม (วินาที)<input id="eg" type="number" min="10" value="${Math.round(ev.game_ms / 1000)}"></label></div>
      <label>นับถอยหลังก่อน GO (วินาที)<input id="ec" type="number" min="0" max="10" value="${Math.round((ev.countdown_ms ?? 3000) / 1000)}"></label>
-     <button class="btn primary" data-act="saveev">บันทึก</button></div></div>
-    <div class="card"><div class="h2"><h2>รหัสผ่านและ PIN</h2></div><div class="form"><div class="two"><label>รหัสผ่านแอดมินใหม่<input id="np" type="password" autocomplete="new-password" minlength="6"></label><label>PIN กรรมการใหม่<input id="ni" inputmode="numeric" pattern="[0-9]{4,8}"></label></div>
-     <button class="btn" data-act="savepw">เปลี่ยน (กรอกเฉพาะช่องที่ต้องการเปลี่ยน)</button></div></div>
-    <div class="card"><div class="h2"><h2>เอกสาร</h2><span>กติกา FAQ และไฟล์อื่น</span></div>
+     <button class="btn primary" data-act="saveev">บันทึกเวลา</button></div></div>
+    <div class="card"><div class="h2"><h2>เอกสาร</h2><span>กติกา FAQ และไฟล์อื่น กรรมการเปิดดูได้จากปุ่มเอกสารในหน้ากรรมการ</span></div>
      <label class="switch"><input type="checkbox" id="dref" ${ev.docs_ref !== false ? "checked" : ""}><span></span><b>กรรมการเปิดดูเอกสารได้</b></label>
      <div id="doclist" class="doclist"><p class="muted">กำลังโหลด</p></div>
      <div class="form" style="margin-top:12px"><div class="two"><label>ชื่อเอกสาร<input id="dt" maxlength="80" placeholder="เช่น กติกา, FAQ"></label><label>ไฟล์ (PDF หรือรูป ไม่เกิน 10 MB)<input id="df" type="file" accept=".pdf,image/*"></label></div>
      <button class="btn primary" data-act="docadd">อัปโหลด</button></div></div>
-    <div class="card"><div class="h2"><h2>ข้อมูล</h2></div><div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
-     <div class="form" style="margin-top:14px"><label>ล้างเฉพาะผลการแข่ง เก็บชื่อทีม ตารางคู่ และเวลานัดไว้ ใช้หลังกดลองระบบ<select id="rrs"><option value="all">ทุกคู่ (คู่ซ้อมและคู่แข่งจริง)</option><option value="practice">เฉพาะคู่ซ้อม</option><option value="comp">เฉพาะคู่แข่งจริง</option></select></label><button class="btn" data-act="resetres">ล้างเฉพาะผล</button></div>
-     <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ แต่เวลานัดทุกคู่จะถูกล้าง</span></div></div></div>
-   <div class="card links"><div class="h2"><h2>ลิงก์</h2></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "กรรมการ", "เครื่องกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "แอดมิน", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
+    <div class="card"><div class="h2"><h2>รหัสผ่านและ PIN</h2></div><div class="form"><div class="two"><label>รหัสผ่านแอดมินใหม่<input id="np" type="password" autocomplete="new-password" minlength="6"></label><label>PIN กรรมการใหม่<input id="ni" inputmode="numeric" pattern="[0-9]{4,8}"></label></div>
+     <button class="btn" data-act="savepw">เปลี่ยน (กรอกเฉพาะช่องที่ต้องการเปลี่ยน)</button></div></div>
+    ${adv("rules", "ขั้นสูง : โหมดกติกา", rulesHtml)}
+    ${adv("data", "ขั้นสูง : ดาวน์โหลดผล ล้างผล และเริ่มงานใหม่", dataHtml)}
+    ${adv("log", "ขั้นสูง : บันทึกการทำงาน (ใครทำอะไรเมื่อไร)", logHtml())}</div>
+   <div class="card links"><div class="h2"><h2>ลิงก์</h2><span>สแกน QR หรือคัดลอกลิงก์ไปเปิดในแต่ละเครื่อง</span></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "กรรมการ", "มือถือกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "แอดมิน", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
 }
 async function loadDocs() {
   const el = $("doclist"); if (!el) return;
@@ -808,18 +756,19 @@ function afterForm() {
   document.querySelectorAll("[data-qr]").forEach((d) => { try { const q = window.qrcode(0, "M"); q.addData(d.dataset.qr); q.make(); d.innerHTML = q.createSvgTag({ scalable: true, margin: 2 }); d.firstChild.style.cssText = "width:110px;height:110px"; } catch (e) {} });
 }
 
-// ---------- Log tab ----------
+// ---------- Log (advanced section of settings) ----------
 let logRows = [], logF = "";
 const AL = { "queue.call": "เรียกคู่", "queue.clear": "เอาลงจากสนาม", "ref.transfer": "ย้ายเครื่องกรรมการ", "flow.setup_start": "เริ่ม Setup", "flow.setup_skip": "ข้าม Setup", "flow.go": "เริ่มแข่ง", "flow.false_start": "ออกตัวก่อน", "flow.reset": "รีเซ็ตเกม", "game.confirm": "รับรองผล", "match.absent_req": "ขอแพ้บาย", "mark.undo": "ย้อนกลับ", "mark.add": "แอดมินเพิ่มเหตุการณ์", "mark.void": "แอดมินลบเหตุการณ์", "mark.unvoid": "แอดมินกู้เหตุการณ์", "mark.edit": "แอดมินแก้เหตุการณ์", "mark.exit_first": "ออกจากกรอบแดงก่อน", "mark.lift_first": "ยกแท่นแรก", "mark.park": "จอดแท่น +1", "mark.unpark": "จอดแท่น -1", "mark.complete": "ภารกิจสำเร็จ", "mark.retry": "Retry", "reset.results": "ล้างเฉพาะผล", "practice.set": "ตั้งคู่ซ้อม", "match.postpone": "ไว้ทีหลัง", "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง", "match.forfeit": "แพ้บาย", "team.absent": "ทีมไม่มา",
   "timer.start_setup": "เริ่ม Setup", "timer.start_game": "เริ่มแข่ง", "timer.pause": "หยุดนาฬิกา", "timer.resume": "เล่นต่อ", "timer.reset": "รีเซ็ตนาฬิกา",
   "game.pattern": "เลือกแบบสนาม", "game.parked_inc": "จอดเพิ่ม", "game.parked_dec": "จอดลด", "game.lift": "ยกแท่นแรก", "game.exit": "ออกจากกรอบแดง", "game.clear_lift": "ล้างยกแท่น", "game.clear_exit": "ล้างออกกรอบ", "game.finish": "จบเกม", "game.judge": "กรรมการตัดสิน" };
 const actorTh = (a) => (a === "admin" ? "แอดมิน" : a === "system:auto" ? "ระบบ เปิดคิวตามเวลา" : String(a).startsWith("ref:") ? "กรรมการ" : a);
-function logView() {
-  return `<div class="h2"><h2>บันทึกการทำงาน</h2><select id="lgf" data-act-change="lgf"><option value="">ทั้งหมด</option><option value="admin" ${logF === "admin" ? "selected" : ""}>แอดมิน</option><option value="ref" ${logF === "ref" ? "selected" : ""}>กรรมการ</option></select><button class="btn small" data-act="logload">โหลดใหม่</button></div><div class="tw"><table class="tbl"><thead><tr><th>เวลา</th><th>ใคร</th><th>ทำอะไร</th><th>กับ</th></tr></thead><tbody>${logRows.filter((r) => !logF || (logF === "ref" ? String(r.actor).startsWith("ref:") : r.actor === logF)).map((r) => `<tr><td class="num">${new Date(r.at).toLocaleTimeString("th-TH")}</td><td>${esc(actorTh(r.actor))}</td><td>${esc(AL[r.action] || r.action)}</td><td>${esc(r.target || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">ยังไม่มีรายการ</td></tr>`}</tbody></table></div>`;
+function logHtml() {
+  return `<div class="h2"><select id="lgf" data-act-change="lgf"><option value="">ทั้งหมด</option><option value="admin" ${logF === "admin" ? "selected" : ""}>แอดมิน</option><option value="ref" ${logF === "ref" ? "selected" : ""}>กรรมการ</option></select><button class="btn small" data-act="logload">โหลดใหม่</button></div><div class="tw"><table class="tbl"><thead><tr><th>เวลา</th><th>ใคร</th><th>ทำอะไร</th><th>กับ</th></tr></thead><tbody>${logRows.filter((r) => !logF || (logF === "ref" ? String(r.actor).startsWith("ref:") : r.actor === logF)).map((r) => `<tr><td class="num">${new Date(r.at).toLocaleTimeString("th-TH")}</td><td>${esc(actorTh(r.actor))}</td><td>${esc(AL[r.action] || r.action)}</td><td>${esc(r.target || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">ยังไม่มีรายการ</td></tr>`}</tbody></table></div>`;
 }
-async function loadLog() { logRows = (await act(() => adm("a2_adm_audit", { p_limit: 200 }))) || []; redraw(); }
+let logAt = 0;
+async function loadLog() { logAt = Date.now(); logRows = (await act(() => adm("a2_adm_audit", { p_limit: 200 }))) || []; redraw(); }
 
-const VIEW = { home: homeView, queue: queueView, schedule: scheduleView, groups: groupsView, matches: matchesView, teams: teamsView, tv: tvView, settings: settingsView, log: logView };
+const VIEW = { field: fieldView, schedule: scheduleView, groups: groupsView, teams: teamsView, tv: tvView, settings: settingsView };
 
 // ---------- Clock ----------
 function clocks() {
@@ -1007,7 +956,6 @@ const H = {
   cmup(b) { const m = fmtEdit().customMatches, i = +b.dataset.i; if (i > 0) { [m[i - 1], m[i]] = [m[i], m[i - 1]]; redrawFmt(); } },
   cmdn(b) { const m = fmtEdit().customMatches, i = +b.dataset.i; if (i < m.length - 1) { [m[i], m[i + 1]] = [m[i + 1], m[i]]; redrawFmt(); } },
   cmdel(b) { fmtEdit().customMatches.splice(+b.dataset.i, 1); redrawFmt(); },
-  async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "เริ่มจับสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async dlstart() {
     const pool = [...new Set(($("dpool")?.value || "").split("\n").map((s) => s.trim().slice(0, 40)).filter(Boolean))];
     if (!pool.length) return toast("ใส่รายชื่อทีมก่อน", true);
@@ -1035,9 +983,6 @@ const H = {
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "เปลี่ยนตารางสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
-  async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "บันทึกผังแล้ว"); },
-  layreset() { lay = liveLayout(null); paintLay(); },
-  layundo() { lay = liveLayout(event().dash_layout?.live); paintLay(); },
   async docadd() {
     const f = $("df").files[0], title = $("dt").value.trim() || (f && f.name.replace(/\.[^.]+$/, ""));
     if (!f) return toast("เลือกไฟล์ก่อน", true);
@@ -1156,7 +1101,6 @@ function hydrateCustomSelect(t) {
 document.addEventListener("pointerdown", (e) => hydrateCustomSelect(e.target), true);
 document.addEventListener("mousedown", (e) => hydrateCustomSelect(e.target), true);
 document.addEventListener("focusin", (e) => hydrateCustomSelect(e.target));
-document.addEventListener("click", (e) => { if (e.target.closest('[data-tab="log"]')) loadLog(); });
 
 boot();
 
@@ -1172,8 +1116,9 @@ document.addEventListener("change", async (e) => {
   const t = e.target;
   if (t.dataset && t.dataset.boCode) {
     const c = t.dataset.boCode, bo = +t.value;
-    if (!confirm(`คู่ ${c} เปลี่ยนเป็น Bo${bo}`)) { redraw(); return; }
-    if (await act(() => adm("a2_adm_bo", { p_codes: [c], p_bo: bo }), `${c} เป็น Bo${bo} แล้ว`) !== undefined) { await loadAll(); redraw(); }
+    const reDlg = () => { if (dlg.open && dlgCode === c) openDlg(c); };
+    if (!confirm(`คู่ ${c} เปลี่ยนเป็น Bo${bo}`)) { redraw(); reDlg(); return; }
+    if (await act(() => adm("a2_adm_bo", { p_codes: [c], p_bo: bo }), `${c} เป็น Bo${bo} แล้ว`) !== undefined) { await loadAll(); redraw(); reDlg(); }
   }
   if (t.dataset && t.dataset.ffCode && t.value) {
     const c = t.dataset.ffCode, sd = t.value, m = match(c);
