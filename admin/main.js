@@ -709,7 +709,8 @@ function settingsView() {
      <div class="form" style="margin-top:12px"><div class="two"><label>ชื่อเอกสาร<input id="dt" maxlength="80" placeholder="เช่น กติกา, FAQ"></label><label>ไฟล์ (PDF หรือรูป ไม่เกิน 10 MB)<input id="df" type="file" accept=".pdf,image/*"></label></div>
      <button class="btn primary" data-act="docadd">Upload</button></div></div>
     <div class="card"><div class="h2"><h2>Data</h2></div><div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
-     <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ</span></div></div></div>
+     <div class="form" style="margin-top:14px"><label>ล้างเฉพาะผลการแข่ง เก็บชื่อทีม ตารางคู่ และเวลานัดไว้ ใช้หลังกดลองระบบ<select id="rrs"><option value="all">ทุกคู่ (คู่ซ้อมและคู่แข่งจริง)</option><option value="practice">เฉพาะคู่ซ้อม</option><option value="comp">เฉพาะคู่แข่งจริง</option></select></label><button class="btn" data-act="resetres">Reset results only</button></div>
+     <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ แต่เวลานัดทุกคู่จะถูกล้าง</span></div></div></div>
    <div class="card links"><div class="h2"><h2>Links</h2></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "Referee", "เครื่องกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "Admin", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
 }
 async function loadDocs() {
@@ -953,6 +954,13 @@ const H = {
   export() {
     const data = { exported_at: new Date().toISOString(), event: event(), teams: teamsArr(), matches: matches(), games: [...T.a2_game.values()], marks: [...T.a2_mark.values()], standings: S.standings, ranking: S.ranking };
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); a.download = "alvik-result-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "") + ".json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  },
+  // Clear results only (migration 020) : team names, matches and the schedule stay
+  async resetres() {
+    const sc2 = $("rrs").value, what = { all: "ผลทุกคู่", practice: "ผลคู่ซ้อม", comp: "ผลคู่แข่งจริง" }[sc2];
+    if (!confirm(`ล้าง${what} ชื่อทีมและเวลานัดยังอยู่ ย้อนกลับไม่ได้`)) return;
+    const n = await act(() => adm("a2_adm_reset_results", { p_scope: sc2 }));
+    if (n !== undefined) { toast(`ล้างผล ${n} คู่แล้ว`); await loadAll().catch(() => {}); formTab = ""; render(); }
   },
   async reset() { if ($("rc").value.trim() !== "รีเซ็ต") return toast("พิมพ์ รีเซ็ต ให้ตรงก่อน", true); if (!confirm("ลบผลและเกมทั้งหมด ย้อนกลับไม่ได้ ดาวน์โหลด JSON ไว้แล้วหรือยัง")) return; await act(() => adm("a2_adm_reset", {}), "รีเซ็ตแล้ว"); $("rc").value = ""; },
   logload() { loadLog(); },
