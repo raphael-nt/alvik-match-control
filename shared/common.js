@@ -189,10 +189,15 @@ function reloadDerived() {
 export function paintNet() { const s = S.net; document.querySelectorAll("[data-net]").forEach((e) => { e.className = "netdot " + s; e.querySelector("b").textContent = { on: "Online", wait: "Connecting", err: "Offline" }[s]; }); }
 function setNet(s) { S.net = s; paintNet(); notify(); }
 export function connect() {
-  let ch = null;
+  // Each channel gets a generation number. Removing the old channel makes it report CLOSED,
+  // so callbacks from any channel but the newest are ignored, and only one reconnect timer can be pending.
+  let ch = null, gen = 0, retry = 0;
+  const reopen = () => { clearTimeout(retry); retry = setTimeout(open, 3000); };
   const open = async () => {
+    const my = ++gen; clearTimeout(retry);
     setNet("wait");
-    if (ch) { try { sb.removeChannel(ch); } catch (e) {} }
+    const old = ch; ch = null;
+    if (old) { try { sb.removeChannel(old); } catch (e) {} }
     ch = sb.channel("a2-" + Math.random().toString(36).slice(2, 8));
     for (const t of Object.keys(PK).filter((x) => x !== "a2_mark" || OPT.marks)) {
       ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (p) => {
@@ -204,8 +209,9 @@ export function connect() {
       });
     }
     ch.subscribe(async (st) => {
-      if (st === "SUBSCRIBED") { try { await loadAll(); await syncClock(); setNet("on"); } catch (e) { setNet("err"); } }
-      else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT" || st === "CLOSED") { setNet("err"); setTimeout(open, 3000); }
+      if (my !== gen) return;
+      if (st === "SUBSCRIBED") { try { await loadAll(); await syncClock(); if (my === gen) setNet("on"); } catch (e) { if (my === gen) setNet("err"); } }
+      else if (st === "CHANNEL_ERROR" || st === "TIMED_OUT" || st === "CLOSED") { setNet("err"); reopen(); }
     });
   };
   open();
