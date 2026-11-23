@@ -1,6 +1,7 @@
 // Bracket drawn with connector lines: group boxes, then knockout rounds, built from a2_group and a2_match
 import { groups, match, matches, teamName, srcLabel, sideName, tableOf, teamAbsent, esc, grpName, bracketMode } from "./common.js";
 import { stageLabel, KO_ORDER } from "./format.js";
+import { th } from "./lang.js";
 
 // Data source : live store, or preview data from bracketHtml({ data: { groups, matches } }) before a format is applied
 let PV = null;
@@ -20,8 +21,8 @@ const _table = (g) => {
   const gr = PV.groups.find((x) => x.grp === g); if (!gr) return [];
   return (gr.srcs || []).map((src, i) => ({ grp: g, slot: i, pos: i + 1, seed: src && src.seed != null ? src.seed : null, mw: 0, ml: 0, gw: 0, gl: 0, sure: false }));
 };
-const _team = (sd) => (PV ? "Team " + sd : teamName(sd));
-const _side = (m, side) => (PV ? (m[side + "_seed"] != null ? "Team " + m[side + "_seed"] : srcLabel(side === "red" ? m.red_src : m.blue_src)) : sideName(m, side));
+const _team = (sd) => (PV ? (th() ? "ทีม " : "Team ") + sd : teamName(sd));
+const _side = (m, side) => (PV ? (m[side + "_seed"] != null ? (th() ? "ทีม " : "Team ") + m[side + "_seed"] : srcLabel(side === "red" ? m.red_src : m.blue_src)) : sideName(m, side));
 
 // Box sizes. bracketHtml({ compact: true }) swaps in shorter rows with no match chips and no champion box,
 // for short panels such as the Live screen strip
@@ -159,12 +160,12 @@ function chipHtml(m, clickable) {
 }
 function boxHtml(b, clickable, mByGrp) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
-  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : grpName(b.g.grp);
+  const title = isM ? (b.m.stage === "final" ? (th() ? "ชิงชนะเลิศ" : "Final") : b.m.stage === "third" ? (th() ? "ชิงอันดับที่ 3" : "3rd place") : b.m.code) : grpName(b.g.grp);
   const stLbl = isM ? stageLabel(b.m.stage) : stageLabel(b.g.stage);
   const sub = isM ? `${stLbl && b.m.stage !== "final" && b.m.stage !== "third" ? stLbl + ", " : ""}Bo${b.m.bo}` : stLbl;
   const rh = rowsOf(b).map((r) => {
     const up = isM ? r.win : adv > 0 && r.sure && r.pos <= adv, out = isM ? r.lose : adv > 0 && r.sure && r.pos > adv, ab = r.seed != null && teamAbsent(r.seed);
-    return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>absent</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
+    return `<div class="bk-row${up ? " up" : ""}${out ? " out" : ""}" style="height:${RH}px"><span class="p">${isM ? "" : r.sure ? r.pos : "-"}</span><span class="n${r.seed == null ? " ph" : ""}">${esc(r.label)}${ab ? ` <s>${th() ? "ไม่มา" : "absent"}</s>` : ""}</span><span class="s">${isM ? "" : r.mw}</span></div>`;
   }).join("");
   const ms = isM ? [b.m] : (mByGrp.get(b.g.grp) || []);
   return `<div class="bk-box${isM && b.m.stage === "final" ? " fin" : ""}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><div class="bk-h" style="height:${HH}px"><b>${title}</b><span>${sub}</span></div>${rh}<div class="bk-c" style="height:${b.ch}px">${ms.map((m) => chipHtml(m, clickable)).join("")}</div></div>`;
@@ -342,7 +343,7 @@ function wires(state) {
 function champHtml(boxes, finalKey) {
   const fb = (finalKey && boxes[finalKey]) || boxes["m:F"] || Object.values(boxes).find((b) => b.kind === "m" && b.m.stage === "final"); if (!fb) return "";
   const w = fb.m.winner_seed;
-  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(_team(w)) : "TBD"}</b></div>`;
+  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>${th() ? "แชมป์" : "Champion"}</span><b>${w != null ? esc(_team(w)) : th() ? "รอผล" : "TBD"}</b></div>`;
 }
 
 // Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.dark for dark screens,

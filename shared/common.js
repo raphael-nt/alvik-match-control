@@ -1,4 +1,5 @@
 // Shared library for all pages: live data, clock and display helpers
+import { th } from "./lang.js";
 export const SB_URL = "https://sylaqdubfjgmaxhtrrnk.supabase.co";
 export const SB_KEY = "sb_publishable_9x3-7C7fLbQZBDtkk8YAGw_P1XclMv8";
 export const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -92,8 +93,8 @@ export const bracketMode = () => {
 };
 export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_team.get(seed); return t && t.name ? t.name : "Team " + seed; };
 // Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
-export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || "Group " + g; };
-export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
+export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || (th() ? "กลุ่ม " : "Group ") + g; };
+export const srcLabel = (src) => (!src ? "" : th() ? (src.seed ? "ทีมลำดับ " + src.seed : src.g ? `อันดับ ${src.p} ${grpName(src.g)}` : src.w ? "ผู้ชนะ " + src.w : src.l ? "ผู้แพ้ " + src.l : "") : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
 export const tableOf = (grp) => {
   if (!_cTable || _stRef !== S.standings) {

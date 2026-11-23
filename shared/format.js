@@ -1,3 +1,4 @@
+import { th } from "./lang.js";
 // Flexible tournament format generator.
 // Supports arbitrary sequences of group rounds (round robin, unequal group sizes and advances),
 // optional knockout bracket (seed placement, 3rd place match, editable slots at every sub-round),
@@ -14,8 +15,13 @@ export const LIMITS = { groups: [0, 26], size: [2, 64], teams: 64, matches: 400,
 export const BOS = [1, 3, 5, 7];
 const L = (i) => String.fromCharCode(65 + i);
 
+const STAGE_TH = {
+  r1: "รอบแบ่งกลุ่ม", r2: "รอบสอง", r64: "รอบ 64 ทีม", r32: "รอบ 32 ทีม",
+  r16: "รอบ 16 ทีม", qf: "รอบ 8 ทีม", sf: "รอบรองชนะเลิศ", third: "ชิงอันดับที่ 3", final: "ชิงชนะเลิศ", practice: "ซ้อม",
+};
 export function stageLabel(st) {
   if (!st) return "";
+  if (th()) { if (STAGE_TH[st]) return STAGE_TH[st]; const t = /^r(\d+)$/.exec(st); return t ? `รอบที่ ${t[1]}` : st; }
   if (STAGE_EN[st]) return STAGE_EN[st];
   const m = /^r(\d+)$/.exec(st);
   return m ? `Round ${m[1]}` : st;

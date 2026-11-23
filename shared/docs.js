@@ -1,5 +1,6 @@
 // Documents stored in a2_doc (migration 014). auth is { p_pw } for admin or { p_pin } for referee
 import { rpc, esc } from "./common.js";
+import { th } from "./lang.js";
 
 export const listDocs = (auth) => rpc("a2_doc_list", auth);
 export const fmtSize = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
@@ -21,7 +22,8 @@ export function closeDoc() { const m = document.getElementById("docpop"); if (m)
 export async function showDoc(id, auth, title) {
   closeDoc();
   const m = document.createElement("div"); m.id = "docpop"; m.className = "pop";
-  m.innerHTML = `<div class="pop-h"><b>${esc(title || "Document")}</b><button class="pz" data-pz="-1" aria-label="Zoom out">−</button><button class="pz" data-pz="1" aria-label="Zoom in">+</button>${closeX}</div><div class="pop-b" id="docbody"><p class="pop-msg">Loading...</p></div>`;
+  const T = th();
+  m.innerHTML = `<div class="pop-h"><b>${esc(title || (T ? "เอกสาร" : "Document"))}</b><button class="pz" data-pz="-1" aria-label="${T ? "ย่อ" : "Zoom out"}">−</button><button class="pz" data-pz="1" aria-label="${T ? "ขยาย" : "Zoom in"}">+</button>${T ? closeX.replace("<span>Close</span>", "<span>ปิด</span>") : closeX}</div><div class="pop-b" id="docbody"><p class="pop-msg">${T ? "กำลังโหลด..." : "Loading..."}</p></div>`;
   document.body.append(m);
   const body = m.querySelector("#docbody");
   try {
@@ -60,5 +62,5 @@ export const fileToB64 = (file) => new Promise((ok, bad) => {
 
 // Rows for a document list. withDelete adds the admin delete button
 export const docRows = (docs, withDelete) => docs.length
-  ? docs.map((d) => `<div class="docrow"><button class="btn small" data-doc="${d.id}" data-t="${esc(d.title)}">Open</button><div><b>${esc(d.title)}</b><div class="muted">${esc(d.file_name)} · ${fmtSize(d.size)}</div></div>${withDelete ? `<button class="btn small danger" data-docdel="${d.id}" data-t="${esc(d.title)}">Delete</button>` : ""}</div>`).join("")
+  ? docs.map((d) => `<div class="docrow"><button class="btn small" data-doc="${d.id}" data-t="${esc(d.title)}">${th() ? "เปิด" : "Open"}</button><div><b>${esc(d.title)}</b><div class="muted">${esc(d.file_name)} · ${fmtSize(d.size)}</div></div>${withDelete ? `<button class="btn small danger" data-docdel="${d.id}" data-t="${esc(d.title)}">${th() ? "ลบ" : "Delete"}</button>` : ""}</div>`).join("")
   : `<p class="muted">ยังไม่มีเอกสาร</p>`;

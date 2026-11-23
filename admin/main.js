@@ -1,9 +1,12 @@
+import { setLang } from "../shared/lang.js";
 import { bracketHtml, fitBrackets } from "../shared/bracket.js";
 import { PANELS, STAGE, DEFAULT_LIVE, liveLayout } from "../shared/layout.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
 import { useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
 
+// Admin is in Thai; the Dashboard keeps English for the TV
+setLang("th");
 useMarks();
 const fields = () => [field(1)].filter(Boolean);   // v3 single field
 const app = $("app"), dlg = $("dlg");
@@ -11,8 +14,12 @@ const store = (k, v) => { try { if (v === undefined) return sessionStorage.getIt
 const lstore = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
 let pw = store("a2pw") || "", authed = false, started = false, hasSetup = null;
 let tab = lstore("a2tab") || "home";
-const TABS = [["home", "Overview"], ["queue", "Queue"], ["schedule", "Schedule"], ["groups", "Standings"], ["matches", "Matches"], ["teams", "Teams"], ["tv", "Dashboard"], ["settings", "Settings"], ["log", "Log"]];
-const ST_EN = { locked: "Locked", ready: "Ready", queued: "On field", live: "Live", done: "Finished" };
+const TABS = [["home", "ภาพรวม"], ["queue", "คิว"], ["schedule", "ตารางเวลา"], ["groups", "ตารางคะแนน"], ["matches", "รายการคู่"], ["teams", "ทีม"], ["tv", "จอ Dashboard"], ["settings", "ตั้งค่า"], ["log", "บันทึก"]];
+const ST_EN = { locked: "รอผล", ready: "พร้อม", queued: "บนสนาม", live: "กำลังแข่ง", done: "จบแล้ว" };
+const sideTh = (s) => (s === "red" ? "แดง" : s === "blue" ? "น้ำเงิน" : s === "both" ? "พร้อมกัน" : s || "");
+const PH_TH = { empty: "ว่าง", idle: "รอเริ่ม", setup: "Setup", ready: "พร้อม", countdown: "นับถอยหลัง", game: "กำลังแข่ง", stopped: "หยุด", over: "หมดเวลา" };
+const BK_TH = { auto: "อัตโนมัติ", practice: "คู่ซ้อม", comp: "การแข่งจริง" };
+const PANEL_TH = { info: "ข้อมูลคู่", red: "ทีมแดง", clock: "นาฬิกา", blue: "ทีมน้ำเงิน", bracket: "ตารางสาย", upnext: "คู่ถัดไป" };
 
 // ---------- Admin RPC ----------
 async function adm(name, args) {
@@ -58,7 +65,7 @@ async function boot() {
 
 // ---------- Shell ----------
 function shell() {
-  app.innerHTML = `<div class="hdr"><div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">Sign out</button></div>
+  app.innerHTML = `<div class="hdr"><div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="เต็มจอ" title="เต็มจอ">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">ออกจากระบบ</button></div>
     <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">${t}</button>`).join("")}</nav></div><div class="main" id="mn"></div>`;
   $("lo").onclick = () => logout(false);
   const fb = $("fsb"); if (fb) fb.onclick = () => toggleFs()?.catch?.(() => {});
@@ -86,26 +93,26 @@ const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no 
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
 function clockBox(f) {
   const m = f && f.match_code ? match(f.match_code) : null;
-  if (!m) return `<div class="ck empty"><div class="ckh"><b>Field</b><span>Empty</span></div><div class="ckt" data-clk>1:30.0</div></div>`;
+  if (!m) return `<div class="ck empty"><div class="ckh"><b>สนาม</b><span>ว่าง</span></div><div class="ckt" data-clk>1:30.0</div></div>`;
   const g = openGame(m.code);
-  return `<div class="ck st-${m.status}"><div class="ckh"><b>${m.code}</b><span>${g ? "Game " + gameNo(m.code, g) + " of " + m.bo : ""}${g?.pattern ? " · Pattern " + g.pattern : ""}</span><span class="dot${refOnline(f) ? " on" : ""}" title="Referee ${refOnline(f) ? "online" : "offline"}"></span></div>
+  return `<div class="ck st-${m.status}"><div class="ckh"><b>${m.code}</b><span>${g ? "เกม " + gameNo(m.code, g) + " จาก " + m.bo : ""}${g?.pattern ? ", แบบสนาม " + g.pattern : ""}</span><span class="dot${refOnline(f) ? " on" : ""}" title="เครื่องกรรมการ${refOnline(f) ? "ออนไลน์" : "ออฟไลน์"}"></span></div>
     <div class="ckv"><span class="r">${esc(sideName(m, "red"))}</span><b>${m.red_wins}-${m.blue_wins}</b><span class="b">${esc(sideName(m, "blue"))}</span></div>
     <div class="ckt" data-clk>1:30.0</div><div class="ckp muted" data-ph></div></div>`;
 }
 function homeView() {
-  const rq = upNext().slice(0, 6).map((m) => `<div class="rq"><b>${m.code}</b><span>${esc(sideName(m, "red"))} vs ${esc(sideName(m, "blue"))}</span><span class="muted">${m.sched_at ? fmtTime(m.sched_at) + (m.auto_open ? " auto" : "") : ""}</span><span></span><button class="btn small primary" data-act="open" data-c="${m.code}">Call</button></div>`).join("") || `<p class="muted">ยังไม่มีคู่ที่พร้อม</p>`;
+  const rq = upNext().slice(0, 6).map((m) => `<div class="rq"><b>${m.code}</b><span>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</span><span class="muted">${m.sched_at ? fmtTime(m.sched_at) + (m.auto_open ? " อัตโนมัติ" : "") : ""}</span><span></span><button class="btn small primary" data-act="open" data-c="${m.code}">เรียก</button></div>`).join("") || `<p class="muted">ยังไม่มีคู่ที่พร้อม</p>`;
   return `${alertsHtml()}<div class="home"><div class="card hbk">${bracketHtml({ clickable: true })}</div>
-    <div class="hbot"><div class="card"><div class="h2"><h2>Up next</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div>${clockBox(field(1))}</div></div></div>`;
+    <div class="hbot"><div class="card"><div class="h2"><h2>คู่ถัดไป</h2><span>กดชิปคู่ในตารางสายเพื่อดูหรือแก้ผล</span></div>${rq}</div><div>${clockBox(field(1))}</div></div></div>`;
 }
 
 // ---------- Things waiting for the admin, shown on top of Overview and Queue ----------
 function alertsHtml() {
   const out = [], f = field(1), onField = f && f.match_code ? match(f.match_code) : null, ev = event();
-  matches().filter((m) => m.absent_req).forEach((m) => out.push(`<div class="al warn">คู่ ${m.code} : กรรมการขอให้ฝั่ง ${m.absent_req.toUpperCase()} (${esc(sideName(m, m.absent_req))}) แพ้บาย
+  matches().filter((m) => m.absent_req).forEach((m) => out.push(`<div class="al warn">คู่ ${m.code} : กรรมการขอให้ฝั่ง${sideTh(m.absent_req)} (${esc(sideName(m, m.absent_req))}) แพ้บาย
     <button class="btn small danger" data-act="approve" data-c="${m.code}" data-s="${m.absent_req}">อนุมัติ</button><button class="btn small" data-act="reject" data-c="${m.code}">ไม่อนุมัติ</button></div>`));
   const tied = [...new Set(S.standings.filter((r) => r.tied).map((r) => r.grp))];
   if (tied.length) out.push(`<div class="al warn">กลุ่ม ${tied.join(", ")} มีทีมคะแนนเท่ากันทุกอย่าง ต้องจัดลำดับเองก่อนทีมจะเข้ารอบต่อ <button class="btn small" data-act="gotab" data-t="groups">ไปจัดลำดับ</button></div>`);
-  if (onField && onField.status !== "done" && !refOnline(f)) out.push(`<div class="al">เครื่องกรรมการไม่ได้ออนไลน์ ถ้าเครื่องเสียให้กด Transfer referee แล้วเปิดหน้ากรรมการในเครื่องใหม่ <button class="btn small" data-act="transfer">Transfer referee</button></div>`);
+  if (onField && onField.status !== "done" && !refOnline(f)) out.push(`<div class="al">เครื่องกรรมการไม่ได้ออนไลน์ ถ้าเครื่องเสียให้กดย้ายเครื่องกรรมการ แล้วเปิดหน้ากรรมการในเครื่องใหม่ <button class="btn small" data-act="transfer">ย้ายเครื่องกรรมการ</button></div>`);
   if (ev.notice_on && ev.notice) out.push(`<div class="al info">กำลังประกาศบนจอ : ${esc(ev.notice)} <button class="btn small" data-act="noticehide">ซ่อนประกาศ</button></div>`);
   return out.length ? `<div class="alerts">${out.join("")}</div>` : "";
 }
@@ -113,12 +120,12 @@ function alertsHtml() {
 const boEditable = (m) => m.status !== "done" && !m.forfeit && !gamesOf(m.code).some((g) => g.status !== "void" && g.status !== "ready");
 function rowTools(x, f) {
   const out = [];
-  if (x.status === "ready" && x.field_no == null) out.push(`<button class="btn small primary" data-act="open" data-c="${x.code}">Call</button>`);
+  if (x.status === "ready" && x.field_no == null) out.push(`<button class="btn small primary" data-act="open" data-c="${x.code}">เรียก</button>`);
   if ((x.status === "ready" || x.status === "locked") && x.field_no == null) out.push(`<button class="btn small" data-act="postpone" data-c="${x.code}" title="ย้ายไปท้ายคิว">ไว้ทีหลัง</button>`);
   if (boEditable(x)) out.push(`<select class="sm" data-bo-code="${x.code}" title="เปลี่ยน Bo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${x.bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select>`);
   if (x.red_seed != null && x.blue_seed != null && x.status !== "done") out.push(`<select class="sm" data-ff-code="${x.code}" title="ทีมไม่มา"><option value="">ทีมไม่มา...</option><option value="red">${esc(sideName(x, "red"))} ไม่มา</option><option value="blue">${esc(sideName(x, "blue"))} ไม่มา</option></select>`);
   if (x.forfeit) out.push(`<button class="btn small" data-act="ffundo" data-c="${x.code}">ยกเลิกแพ้บาย</button>`);
-  out.push(`<button class="btn small" data-act="edit" data-c="${x.code}">Open</button>`);
+  out.push(`<button class="btn small" data-act="edit" data-c="${x.code}">เปิด</button>`);
   return out.join(" ");
 }
 // On-site tools card. Kept as one DOM node so typing is not lost when live data redraws the Queue tab
@@ -129,7 +136,7 @@ function toolsHtml() {
     <div class="tl"><b>เปลี่ยน Bo คู่ที่ยังไม่เริ่มทั้งหมด</b><span class="muted">ใช้เมื่อเวลาไม่พอ คู่ที่เริ่มแข่งแล้วไม่เปลี่ยน</span>
       <div class="row"><select id="boall">${[1, 3, 5, 7].map((n) => `<option value="${n}">Bo${n}</option>`).join("")}</select><button class="btn" data-act="boall">เปลี่ยนทั้งหมด</button></div></div>
     <div class="tl"><b>ทีมถอนตัว หรือกลับมาแข่ง</b><span class="muted">ถอนตัว : คู่ที่เหลือของทีมนี้แพ้บายทั้งหมด กลับมาแข่ง : ยกเลิกแพ้บายของคู่ที่ยังไม่จบ</span>
-      <div class="row"><select id="wdteam">${t.map((x) => `<option value="${x.seed}">${esc(teamName(x.seed))}${x.absent ? " (ถอนตัวอยู่)" : ""} · เหลือ ${left(x.seed)} คู่</option>`).join("")}</select>
+      <div class="row"><select id="wdteam">${t.map((x) => `<option value="${x.seed}">${esc(teamName(x.seed))}${x.absent ? " (ถอนตัวอยู่)" : ""} เหลือ ${left(x.seed)} คู่</option>`).join("")}</select>
       <button class="btn danger" data-act="withdraw">ถอนตัว</button><button class="btn" data-act="comeback">กลับมาแข่ง</button></div></div>
     <div class="tl"><b>ประกาศบนจอ Dashboard</b><span class="muted">${ev.notice_on && ev.notice ? "ตอนนี้แสดงอยู่" : "ตอนนี้ไม่ได้แสดง"}</span>
       <div class="row"><input id="ntext" maxlength="200" placeholder="เช่น พักเที่ยง กลับมาแข่ง 13:00" value="${esc(ev.notice || "")}"><button class="btn primary" data-act="noticeshow">แสดง</button><button class="btn" data-act="noticehide">ซ่อน</button></div></div></div>`;
@@ -145,30 +152,30 @@ const refreshTools = () => { if (toolsEl) toolsEl.innerHTML = toolsHtml(); };
 function flowBtns(f) {
   const b = (a, t, c = "") => `<button class="btn ${c}" data-act="timer" data-a="${a}">${t}</button>`;
   const ph = f.phase;
-  if (ph === "idle") return b("setup_start", "Start setup", "primary") + b("setup_skip", "Skip setup");
-  if (ph === "setup") return b("setup_skip", "Skip setup");
-  if (ph === "ready") return b("go", "Start (3 2 1)", "primary");
-  if (ph === "countdown" || ph === "game") return b("false_start", "False start", "danger");
+  if (ph === "idle") return b("setup_start", "เริ่ม Setup", "primary") + b("setup_skip", "ข้าม Setup");
+  if (ph === "setup") return b("setup_skip", "ข้าม Setup");
+  if (ph === "ready") return b("go", "เริ่มแข่ง (3 2 1)", "primary");
+  if (ph === "countdown" || ph === "game") return b("false_start", "ออกตัวก่อน (False start)", "danger");
   return "";
 }
 function queueView() {
   const f = field(1), m = f && f.match_code ? match(f.match_code) : null, nx = upNext();
   let card;
-  if (!m) card = `<div class="card fc"><div class="h2"><h2>On field</h2><span>Empty</span></div>
-    ${nx.length ? `<button class="btn primary big" data-act="open" data-c="${nx[0].code}">Call next match  ${nx[0].code}  ${esc(sideName(nx[0], "red"))} vs ${esc(sideName(nx[0], "blue"))}</button>` : `<p class="muted">ไม่มีคู่ที่พร้อม</p>`}</div>`;
+  if (!m) card = `<div class="card fc"><div class="h2"><h2>บนสนาม</h2><span>ว่าง</span></div>
+    ${nx.length ? `<button class="btn primary big" data-act="open" data-c="${nx[0].code}">เรียกคู่ถัดไป  ${nx[0].code}  ${esc(sideName(nx[0], "red"))} พบ ${esc(sideName(nx[0], "blue"))}</button>` : `<p class="muted">ไม่มีคู่ที่พร้อม</p>`}</div>`;
   else {
     const g = openGame(m.code), done = m.status === "done", c = f.checks || {};
-    card = `<div class="card fc st-${m.status}"><div class="h2"><h2>On field  ${m.code}</h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><span>Referee ${refOnline(f) ? "online" : "offline"}</span></div>
+    card = `<div class="card fc st-${m.status}"><div class="h2"><h2>บนสนาม  ${m.code}</h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><span>เครื่องกรรมการ${refOnline(f) ? "ออนไลน์" : "ออฟไลน์"}</span></div>
       <div class="vs"><span>${stageLabel(m.stage)}${m.grp ? " " + esc(grpName(m.grp)) : ""}</span><span class="r">${esc(sideName(m, "red"))}</span><span class="sc">${m.red_wins} - ${m.blue_wins}</span><span class="b">${esc(sideName(m, "blue"))}</span></div>
-      <div class="muted">${done ? "Match finished · ผู้ชนะ " + esc(teamName(m.winner_seed)) : (g ? "Game " + gameNo(m.code, g) + " of " + m.bo : "") + (g?.pattern ? " · Pattern " + g.pattern : " · ยังไม่เลือกแบบสนาม")}${!done && ["setup", "ready"].includes(f.phase) ? ` · Checklist ${["red_in", "blue_in", "stands"].filter((k) => c[k]).length}/3` : ""}</div>
+      <div class="muted">${done ? "จบคู่แล้ว ผู้ชนะ " + esc(teamName(m.winner_seed)) : (g ? "เกม " + gameNo(m.code, g) + " จาก " + m.bo : "") + (g?.pattern ? ", แบบสนาม " + g.pattern : ", ยังไม่เลือกแบบสนาม")}${!done && ["setup", "ready"].includes(f.phase) ? `, Checklist ${["red_in", "blue_in", "stands"].filter((k) => c[k]).length}/3` : ""}</div>
       <div class="t" data-clk>1:30.0</div><div class="muted" data-ph></div>
-      <div class="btns">${done ? (nx.length ? `<button class="btn primary" data-act="open" data-c="${nx[0].code}">Call next match ${nx[0].code}</button>` : "") : flowBtns(f)}
-        <button class="btn" data-act="edit" data-c="${m.code}">Event log</button><button class="btn" data-act="transfer">Transfer referee</button><button class="btn danger" data-act="close" data-c="${m.code}">Clear field</button></div>
-      <p class="muted" style="margin:6px 0 0">ปุ่ม Start ของแอดมินข้าม Checklist ได้ ใช้เมื่อเครื่องกรรมการมีปัญหา</p></div>`;
+      <div class="btns">${done ? (nx.length ? `<button class="btn primary" data-act="open" data-c="${nx[0].code}">เรียกคู่ถัดไป ${nx[0].code}</button>` : "") : flowBtns(f)}
+        <button class="btn" data-act="edit" data-c="${m.code}">บันทึกเหตุการณ์</button><button class="btn" data-act="transfer">ย้ายเครื่องกรรมการ</button><button class="btn danger" data-act="close" data-c="${m.code}">เอาลงจากสนาม</button></div>
+      <p class="muted" style="margin:6px 0 0">ปุ่มเริ่มแข่งของแอดมินข้าม Checklist ได้ ใช้เมื่อเครื่องกรรมการมีปัญหา</p></div>`;
   }
-  const rows = matches().map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} vs ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " auto" : "") : ""}</td>
+  const rows = matches().map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
-  return `${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>Order</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว เปลี่ยน Bo ได้จนกว่าคู่นั้นจะเริ่มแข่ง</span></div><div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Teams</th><th class="num">Score</th><th>Status</th><th>Time</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+  return `${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว เปลี่ยน Bo ได้จนกว่าคู่นั้นจะเริ่มแข่ง</span></div><div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 // ---------- Schedule tab ----------
@@ -214,18 +221,18 @@ function scheduleView() {
   if (!sc.pday) sc.pday = pfirst ? dayOf(pfirst.sched_at) : todayStr();
   const stages = stagesInUse(), present = practiceTeams(), nT = present.length;
   const prows = pracMatches().map((m) => `<tr><td><b>${m.code}</b></td><td>${m.sched_at ? hm(m.sched_at) : ""}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td>Bo${m.bo}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td></tr>`).join("");
-  return `<div class="h2"><h2>Schedule</h2><span>จัดเวลาแข่งและวันซ้อม เวลาพักไม่นับเป็นเวลาคิว พิมพ์หรือบันทึกเป็น PDF ได้</span></div>
+  return `<div class="h2"><h2>ตารางเวลา</h2><span>จัดเวลาแข่งและวันซ้อม เวลาพักไม่นับเป็นเวลาคิว พิมพ์หรือบันทึกเป็น PDF ได้</span></div>
    <div class="card tools sched"><div class="tl"><b>ตารางแข่ง</b>
      <div class="gf" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
        <label>วันแข่ง<input type="date" data-sc="day" value="${sc.day}"></label><label>เวลาเริ่มคู่แรก<input type="time" data-sc="start" value="${sc.start}"></label>
        ${stages.map((st) => `<label>${esc(stageLabel(st))} (นาทีต่อคู่)<input type="number" min="1" value="${minOf(st)}" data-scmin="${st}"></label>`).join("")}
        <label>เรียกขึ้นสนามเองเมื่อถึงเวลา<select data-sc="auto"><option value="1" ${sc.auto ? "selected" : ""}>เปิด</option><option value="0" ${sc.auto ? "" : "selected"}>ปิด</option></select></label></div>
-     <div class="row"><button class="btn primary" data-act="autofill">จัดเวลาอัตโนมัติ</button><span class="muted">นาทีต่อคู่รวมเวลาเปลี่ยนคู่แล้ว เติมลงตารางด้านล่าง ตรวจแล้วกด Save schedule</span></div></div>
+     <div class="row"><button class="btn primary" data-act="autofill">จัดเวลาอัตโนมัติ</button><span class="muted">นาทีต่อคู่รวมเวลาเปลี่ยนคู่แล้ว เติมลงตารางด้านล่าง ตรวจแล้วกดบันทึกเวลา</span></div></div>
      ${breaksHtml()}</div>
-   <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Round</th><th>Teams</th><th>Time</th><th>Auto call</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
+   <div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>รอบ</th><th>ทีม</th><th>เวลา</th><th>เรียกอัตโนมัติ</th><th></th></tr></thead><tbody>${compMatches().map((m) => `<tr data-sc="${m.code}"><td><b>${m.code}</b></td><td class="muted">${esc(stageLabel(m.stage))} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td>
      <td>${m.status === "done" ? `<span class="muted">${hm(m.sched_at)} จบแล้ว</span>` : `<input type="time" data-k="at" value="${hm(m.sched_at)}">`}</td>
      <td>${m.status === "done" ? "" : `<input type="checkbox" data-k="auto" ${m.auto_open ? "checked" : ""} aria-label="เปิดอัตโนมัติ ${m.code}">`}</td><td>${m.sched_at && m.status !== "done" ? `<button class="btn small" data-act="clearsc">ล้าง</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
-   <div class="btns"><button class="btn primary" data-act="savesc">Save schedule</button><select id="pdfstage" class="sm"><option value="">ทุกรอบ</option>${stages.map((st) => `<option value="${esc(st)}">${esc(stageLabel(st))}</option>`).join("")}</select>
+   <div class="btns"><button class="btn primary" data-act="savesc">บันทึกเวลา</button><select id="pdfstage" class="sm"><option value="">ทุกรอบ</option>${stages.map((st) => `<option value="${esc(st)}">${esc(stageLabel(st))}</option>`).join("")}</select>
      <label class="chk2"><input type="checkbox" id="pdfnp">ขึ้นหน้าใหม่ทุกรอบ</label><button class="btn" data-act="pdfcomp">พิมพ์ / PDF ตารางแข่ง</button></div>
 
    <div class="h2" style="margin-top:26px"><h2>วันซ้อม</h2><span>จับคู่ซ้อมแข่งจริง กรรมการใช้หน้าเดิม ผลไม่นับเข้าตารางคะแนนหรือสายแข่ง</span></div>
@@ -239,7 +246,7 @@ function scheduleView() {
        <div class="pteams">${teamsArr().map((t) => `<label class="chk2"><input type="checkbox" data-pteam="${t.seed}" ${(sc.pabsent || []).includes(t.seed) ? "" : "checked"}>${esc(teamName(t.seed))}</label>`).join("")}</div></div>
      <div class="row"><span class="muted">${nT} ทีม ทีมละ ${sc.pgames} คู่ รวม ${(nT * sc.pgames) % 2 ? "ไม่ลงตัว (จำนวนทีม × คู่ ต้องเป็นเลขคู่)" : (nT * sc.pgames) / 2 + " คู่"}</span></div>
      <div class="row"><button class="btn primary" data-act="pracgen">สุ่มคู่ซ้อมและจัดเวลา</button><button class="btn" data-act="pdfprac" ${prows ? "" : "disabled"}>พิมพ์ / PDF ตารางซ้อม</button><button class="btn danger" data-act="pracclear" ${prows ? "" : "disabled"}>ล้างการซ้อม</button></div></div></div>
-   ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Time</th><th>Teams</th><th>Bo</th><th>Status</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม</p>`}`;
+   ${prows ? `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>เวลา</th><th>ทีม</th><th>Bo</th><th>สถานะ</th></tr></thead><tbody>${prows}</tbody></table></div>` : `<p class="muted">ยังไม่มีคู่ซ้อม</p>`}`;
 }
 function readSchedule() {
   const day = sc.day || todayStr(), out = [];
@@ -256,7 +263,7 @@ function autofill() {
   timeline(sc.day || todayStr(), sc.start, rows, (tr) => minOf(match(tr.dataset.sc).stage)).forEach(({ it, t }) => {
     it.querySelector('[data-k="at"]').value = hhmm(t); it.querySelector('[data-k="auto"]').checked = !!sc.auto;
   });
-  toast("จัดเวลาแล้ว ตรวจแล้วกด Save schedule");
+  toast("จัดเวลาแล้ว ตรวจแล้วกดบันทึกเวลา");
 }
 // Printable schedule in a new window; the browser print dialog saves it as PDF.
 // One section per round (each can start on a new page), red and blue teams in their own columns
@@ -265,7 +272,7 @@ function printSchedule(title, list, day, newPage) {
   const at = (hm) => new Date(day + "T" + hm + ":00").getTime();
   const brs = sc.breaks.filter((x) => x.at && +x.min > 0).map((x) => ({ s: at(x.at), x })).sort((a, b) => a.s - b.s);
   const used = new Set(), stages = [...new Set(list.map((m) => m.stage))];
-  const rnd = (st) => (st === "practice" ? "Practice" : stageLabel(st));
+  const rnd = (st) => (st === "practice" ? "คู่ซ้อม" : stageLabel(st));
   const sections = stages.map((st) => {
     const rows = [];
     list.filter((m) => m.stage === st).forEach((m) => {
@@ -292,48 +299,48 @@ function groupsView() {
   const n = groups().length || 1, cols = innerWidth < 760 ? 1 : n <= 3 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4;
   return `<div class="grid5 stand" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${groups().map((gr) => { const G = gr.grp;
     const rows = tableOf(G), tiedAny = rows.some((r) => r.tied), seeds = rows.filter((r) => r.seed != null).map((r) => r.seed), tb = T.a2_tiebreak.get(G);
-    return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${stageLabel(gr.stage)}, top ${gr.adv} advance</span></div>
-      <div class="tw"><table class="tbl"><thead><tr><th>#</th><th>Team</th><th class="num">W-L</th><th class="num">Games</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
+    return `<div><div class="h2"><h2>${esc(grpName(G))}</h2><span>${stageLabel(gr.stage)} เข้ารอบ ${gr.adv} ทีม</span></div>
+      <div class="tw"><table class="tbl"><thead><tr><th>#</th><th>ทีม</th><th class="num">ชนะ-แพ้</th><th class="num">เกม</th><th></th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.tied ? "tied" : ""}"><td>${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) : "รอผล"}${r.how ? `<div class="muted" style="font-size:13px">${esc(r.how)}</div>` : ""}</td><td class="num">${r.mw}-${r.ml}</td><td class="num">${r.gw}-${r.gl}</td>
         <td>${r.tied && i > 0 && rows[i - 1].tied && r.seed != null ? `<button class="btn small" data-act="tbup" data-g="${G}" data-s="${r.seed}">ขึ้น</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
       ${tiedAny ? `<div class="warn">มีทีมเสมอกันทุกเกณฑ์ กดขึ้นเพื่อให้ทีมนั้นอยู่เหนือทีมข้างบน</div>` : ""}${tb ? `<div class="btns"><button class="btn small" data-act="tbclear" data-g="${G}">ล้างการตัดสินลำดับ</button></div>` : ""}</div>`;
   }).join("")}</div>`;
 }
 
 // ---------- Matches tab ----------
-const matchesView = () => `<div class="h2"><h2>Matches</h2><span>แก้ผลรายเกมได้ทุกคู่ แม้จบแล้ว ระบบคำนวณอันดับและผู้ชนะใหม่ให้เอง</span></div>
-  <div class="tw"><table class="tbl"><thead><tr><th>Match</th><th>Round</th><th>Teams</th><th class="num">Score</th><th>Status</th><th></th></tr></thead><tbody>${matches().map((m) => `<tr><td><b>${m.code}</b></td><td>${stageLabel(m.stage)}${m.grp ? " สาย " + m.grp : ""} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td class="num">${m.red_wins}-${m.blue_wins}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td><td><button class="btn small" data-act="edit" data-c="${m.code}">Open</button></td></tr>`).join("")}</tbody></table></div>`;
+const matchesView = () => `<div class="h2"><h2>รายการคู่</h2><span>แก้ผลรายเกมได้ทุกคู่ แม้จบแล้ว ระบบคำนวณอันดับและผู้ชนะใหม่ให้เอง</span></div>
+  <div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>รอบ</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th></th></tr></thead><tbody>${matches().map((m) => `<tr><td><b>${m.code}</b></td><td>${stageLabel(m.stage)}${m.grp ? " สาย " + m.grp : ""} Bo${m.bo}</td><td>${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}</td><td class="num">${m.red_wins}-${m.blue_wins}</td><td><span class="pill ${m.status}">${ST_EN[m.status]}</span></td><td><button class="btn small" data-act="edit" data-c="${m.code}">เปิด</button></td></tr>`).join("")}</tbody></table></div>`;
 
 // ---------- Match dialog ----------
 let dlgCode = "", dlgSig = "";
 const sigOf = (c) => JSON.stringify([match(c), gamesOf(c), gamesOf(c).map((g) => marksOf(g.id).map((x) => x.id + x.voided + x.t_ms))]);
-const KIND = { exit_first: "Left red box first", lift_first: "First lift", park: "Stand parked +1", unpark: "Stand parked -1", complete: "Mission complete", retry: "Retry", false_start: "False start" };
-const GST = { ready: "Not started", live: "Live", review: "Review", done: "Done", replay: "Tie, replayed", void: "Void" };
+const KIND = { exit_first: "ออกจากกรอบแดงก่อน", lift_first: "ยกแท่นแรก", park: "จอดแท่น +1", unpark: "จอดแท่น -1", complete: "ภารกิจสำเร็จ (Mission complete)", retry: "Retry", false_start: "ออกตัวก่อน (False start)" };
+const GST = { ready: "ยังไม่เริ่ม", live: "กำลังแข่ง", review: "รอรับรองผล", done: "จบแล้ว", replay: "เสมอ แข่งใหม่", void: "ยกเลิก" };
 function gameBlock(m, g) {
   const n = gameNo(m.code, g), pv = g.need === "judge" ? { need: "judge" } : decideV3(g), mk = marksOf(g.id);
-  const res = g.winner ? `${g.winner.toUpperCase()} wins · ${RULE_EN[g.method] || g.method || ""}${g.decided_by === "admin" ? " (admin)" : ""}` : pv.side ? `ถ้ารับรองตอนนี้ ${pv.side.toUpperCase()} ชนะ · ${RULE_EN[pv.method]}` : pv.need === "replay" ? "เสมอ แข่งใหม่ (FAQ 34)" : "กรรมการต้องตัดสิน (FAQ 35)";
-  const row = (x) => `<tr class="${x.voided ? "void" : ""}" data-mid="${x.id}"><td class="num mono">${fmtMs1(x.t_ms)}</td><td>${KIND[x.kind] || x.kind}</td><td class="${x.side === "red" ? "r" : x.side === "blue" ? "b" : ""}">${x.side ? (x.side === "both" ? "Same time" : x.side.toUpperCase()) : ""}</td><td class="muted">${x.source}${x.voided ? " · void" : ""}</td>
-    <td>${x.kind === "false_start" ? "" : x.voided ? `<button class="btn small" data-act="mk" data-op="unvoid">Restore</button>` : `<button class="btn small" data-act="mkedit">Edit time</button> <button class="btn small danger" data-act="mk" data-op="void">Delete</button>`}</td></tr>`;
-  return `<div class="card st-${g.status === "done" ? "done" : g.status === "live" ? "live" : "ready"}" data-g="${g.id}" data-v="${g.version}"><div class="h2"><h2>Game ${g.status === "replay" ? "(replayed)" : n}</h2><span class="pill">${GST[g.status] || g.status}</span><span>${esc(res)}</span></div>
-    <div class="muted">Pattern ${g.pattern || "-"} · Stands RED ${g.red_parked} BLUE ${g.blue_parked} · Retry R${g.red_retries || 0} B${g.blue_retries || 0}</div>
-    <div class="tw"><table class="tbl evl"><thead><tr><th class="num">Time</th><th>Event</th><th>Side</th><th>Source</th><th></th></tr></thead><tbody>${mk.map(row).join("") || `<tr><td colspan="5" class="muted">ยังไม่มีเหตุการณ์</td></tr>`}</tbody></table></div>
-    <div class="gf" style="grid-template-columns:repeat(4,minmax(0,1fr))"><label>Event<select data-n="kind">${Object.entries(KIND).filter(([k]) => k !== "false_start").map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
-      <label>Side<select data-n="side"><option value="red">RED</option><option value="blue">BLUE</option><option value="both">Same time</option></select></label>
-      <label>Time (m:ss.s)<input data-n="t" placeholder="0:12.5"></label><button class="btn" data-act="mkadd">Add event</button></div>
-    <div class="btns"><label class="muted">Pattern <select data-k="pattern"><option value="">-</option>${[1, 2, 3].map((i) => `<option ${g.pattern === i ? "selected" : ""}>${i}</option>`).join("")}</select></label><button class="btn" data-act="gsave">Save pattern</button>
-      ${g.status === "review" || g.status === "done" ? `<button class="btn primary" data-act="gauto">Decide by rules</button>` : ""}
-      <button class="btn red" data-act="gwin" data-w="red">RED wins</button><button class="btn blue" data-act="gwin" data-w="blue">BLUE wins</button>
-      ${g.winner ? `<button class="btn" data-act="gwin" data-w="">Clear winner</button>` : ""}<button class="btn danger" data-act="gvoid">Void game</button></div></div>`;
+  const res = g.winner ? `${sideTh(g.winner)}ชนะ, ${RULE_TH[g.method] || g.method || ""}${g.decided_by === "admin" ? " (แอดมิน)" : ""}` : pv.side ? `ถ้ารับรองตอนนี้ ${sideTh(pv.side)}ชนะ, ${RULE_TH[pv.method]}` : pv.need === "replay" ? "เสมอ แข่งใหม่ (FAQ 34)" : "กรรมการต้องตัดสิน (FAQ 35)";
+  const row = (x) => `<tr class="${x.voided ? "void" : ""}" data-mid="${x.id}"><td class="num mono">${fmtMs1(x.t_ms)}</td><td>${KIND[x.kind] || x.kind}</td><td class="${x.side === "red" ? "r" : x.side === "blue" ? "b" : ""}">${x.side ? sideTh(x.side) : ""}</td><td class="muted">${x.source}${x.voided ? " (ลบแล้ว)" : ""}</td>
+    <td>${x.kind === "false_start" ? "" : x.voided ? `<button class="btn small" data-act="mk" data-op="unvoid">กู้คืน</button>` : `<button class="btn small" data-act="mkedit">แก้เวลา</button> <button class="btn small danger" data-act="mk" data-op="void">ลบ</button>`}</td></tr>`;
+  return `<div class="card st-${g.status === "done" ? "done" : g.status === "live" ? "live" : "ready"}" data-g="${g.id}" data-v="${g.version}"><div class="h2"><h2>เกม ${g.status === "replay" ? "(แข่งใหม่)" : n}</h2><span class="pill">${GST[g.status] || g.status}</span><span>${esc(res)}</span></div>
+    <div class="muted">แบบสนาม ${g.pattern || "-"}, จอดแท่น แดง ${g.red_parked} น้ำเงิน ${g.blue_parked}, Retry แดง ${g.red_retries || 0} น้ำเงิน ${g.blue_retries || 0}</div>
+    <div class="tw"><table class="tbl evl"><thead><tr><th class="num">เวลา</th><th>เหตุการณ์</th><th>ฝั่ง</th><th>ที่มา</th><th></th></tr></thead><tbody>${mk.map(row).join("") || `<tr><td colspan="5" class="muted">ยังไม่มีเหตุการณ์</td></tr>`}</tbody></table></div>
+    <div class="gf" style="grid-template-columns:repeat(4,minmax(0,1fr))"><label>เหตุการณ์<select data-n="kind">${Object.entries(KIND).filter(([k]) => k !== "false_start").map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+      <label>ฝั่ง<select data-n="side"><option value="red">แดง</option><option value="blue">น้ำเงิน</option><option value="both">พร้อมกัน</option></select></label>
+      <label>เวลา (m:ss.s)<input data-n="t" placeholder="0:12.5"></label><button class="btn" data-act="mkadd">เพิ่มเหตุการณ์</button></div>
+    <div class="btns"><label class="muted">แบบสนาม <select data-k="pattern"><option value="">-</option>${[1, 2, 3].map((i) => `<option ${g.pattern === i ? "selected" : ""}>${i}</option>`).join("")}</select></label><button class="btn" data-act="gsave">บันทึกแบบสนาม</button>
+      ${g.status === "review" || g.status === "done" ? `<button class="btn primary" data-act="gauto">ตัดสินตามกติกา</button>` : ""}
+      <button class="btn red" data-act="gwin" data-w="red">แดงชนะ</button><button class="btn blue" data-act="gwin" data-w="blue">น้ำเงินชนะ</button>
+      ${g.winner ? `<button class="btn" data-act="gwin" data-w="">ล้างผู้ชนะ</button>` : ""}<button class="btn danger" data-act="gvoid">ลบเกม</button></div></div>`;
 }
 const parseT = (v) => { v = String(v || "").trim(); if (!v) return 0; const m = v.match(/^(\d+):(\d{1,2})(?:\.(\d))?$/); if (m) return (+m[1] * 60 + +m[2]) * 1000 + (+m[3] || 0) * 100; if (/^\d+(\.\d)?$/.test(v)) return Math.round(+v * 1000); return NaN; };
 function dlgHtml(code) {
   const m = match(code), gs = gamesOf(code), free = !field(1)?.match_code || match(field(1).match_code)?.status === "done";
   dlgSig = sigOf(code);
-  return `<div class="dh"><h2>คู่ ${m.code}  ${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}  <span class="muted">${m.red_wins}-${m.blue_wins}</span></h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><button class="btn" data-act="dclose">Close</button></div>
+  return `<div class="dh"><h2>คู่ ${m.code}  ${esc(sideName(m, "red"))} พบ ${esc(sideName(m, "blue"))}  <span class="muted">${m.red_wins}-${m.blue_wins}</span></h2><span class="pill ${m.status}">${ST_EN[m.status]}</span><button class="btn" data-act="dclose">ปิด</button></div>
    <div class="db">${m.walkover ? `<div class="warn">ชนะบาย ${esc(sideName(m, m.walkover === "red" ? "blue" : "red"))} ชนะ เพราะ ${esc(sideName(m, m.walkover))} ไม่มา ${m.forfeit ? "" : "(ตั้งทีมนี้เป็นไม่มาไว้ในแท็บทีม)"}</div>` : ""}<div class="warn" id="dwarn" hidden>ข้อมูลคู่นี้เพิ่งเปลี่ยนจากที่อื่น <button class="btn small" data-act="dreload">โหลดใหม่</button> </div>
    ${gs.length ? gs.map((g) => gameBlock(m, g)).join("") : `<p class="muted">ยังไม่มีเกมในคู่นี้ ${m.status === "locked" ? "คู่นี้ยังรอผลคู่ก่อนหน้า" : "เกมแรกจะถูกสร้างตอนเปิดคิว หรือกดเพิ่มเกมด้านล่าง"}</p>`}
-   <div class="btns"><button class="btn" data-act="gadd" ${m.status === "locked" ? "disabled" : ""}>Add game</button>${!gs.length && m.status !== "done" ? `<button class="btn" data-act="swap">Swap sides</button>` : ""}
-   ${(m.red_seed != null && m.blue_seed != null && m.status !== "done") || m.forfeit ? ["red", "blue"].map((sd) => `<button class="btn danger" data-act="ff" data-s="${sd}">${esc(sideName(m, sd))} absent (forfeit)</button>`).join("") : ""}${m.forfeit ? `<button class="btn" data-act="ff" data-s="">Cancel forfeit</button>` : ""}
-   ${m.status === "ready" && free ? `<button class="btn primary" data-act="open" data-c="${m.code}" data-keep="1">Call to field</button>` : ""}</div></div>`;
+   <div class="btns"><button class="btn" data-act="gadd" ${m.status === "locked" ? "disabled" : ""}>เพิ่มเกม</button>${!gs.length && m.status !== "done" ? `<button class="btn" data-act="swap">สลับฝั่ง</button>` : ""}
+   ${(m.red_seed != null && m.blue_seed != null && m.status !== "done") || m.forfeit ? ["red", "blue"].map((sd) => `<button class="btn danger" data-act="ff" data-s="${sd}">${esc(sideName(m, sd))} ไม่มา (แพ้บาย)</button>`).join("") : ""}${m.forfeit ? `<button class="btn" data-act="ff" data-s="">ยกเลิกแพ้บาย</button>` : ""}
+   ${m.status === "ready" && free ? `<button class="btn primary" data-act="open" data-c="${m.code}" data-keep="1">เรียกขึ้นสนาม</button>` : ""}</div></div>`;
 }
 function openDlg(code) { dlgCode = code; dlg.innerHTML = dlgHtml(code); if (!dlg.open) dlg.showModal(); }
 function updateDlgBanner() { if (!dlg.open || !dlgCode) return; const w = $("dwarn"); if (w) w.hidden = sigOf(dlgCode) === dlgSig; }
@@ -347,7 +354,7 @@ const curFormat = () => fmtNormalize(event().format);
 const fmtEdit = () => (fmt ||= structuredClone(curFormat()));
 const koOf = (f) => f.rounds.find((r) => r.type === "ko") || null;
 const totalGroupsCount = (f) => f.rounds.filter((r) => r.type === "groups").reduce((s, r) => s + r.groups.length, 0);
-const slotLabel = (k) => (!k ? "Bye" : srcLabel(parseSrcKey(k)) || k);
+const slotLabel = (k) => (!k ? "บาย" : srcLabel(parseSrcKey(k)) || k);
 const boOpts = (cur) => BOS.map((n) => `<option value="${n}" ${+cur === n ? "selected" : ""}>Bo${n}</option>`).join("");
 const stageOpts = (cur) => [...new Set([...STAGE_CHOICES, ...(cur ? [cur] : [])])].map((s) => `<option value="${esc(s)}" ${s === cur ? "selected" : ""}>${esc(stageLabel(s))}</option>`).join("");
 
@@ -363,7 +370,7 @@ function fmtSummary(f, built = null) {
   const err = validateFormat(f, built);
   if (err.length) return `<div class="warn">${err.map(esc).join("<br>")}</div>`;
   const b = built || buildFormat(f), gm = b.matches.filter((m) => m.grp), ko = b.matches.filter((m) => !m.grp), st = [...new Set(ko.map((m) => stageLabel(m.stage)))];
-  return `<p class="muted" style="margin:6px 0 0">${b.format.teams} teams, ${gm.length} group matches${ko.length ? `, ${ko.length} non-group matches (${st.join(", ")})` : ", no knockout"}</p>`;
+  return `<p class="muted" style="margin:6px 0 0">${b.format.teams} ทีม, คู่ในกลุ่ม ${gm.length} คู่${ko.length ? `, คู่นอกกลุ่ม ${ko.length} คู่ (${st.join(", ")})` : ", ไม่มีรอบแพ้คัดออก"}</p>`;
 }
 
 function groupRoundHtml(f, r, rIdx) {
@@ -371,24 +378,24 @@ function groupRoundHtml(f, r, rIdx) {
   const rows = r.groups.map((g, gi) => `<tr><td><b>${g.grp}</b></td>
     <td><input type="number" min="2" max="64" value="${g.size}" data-ri="${rIdx}" data-gi="${gi}" data-gk="size"></td>
     <td><input type="number" min="0" max="${g.size}" value="${g.adv}" data-ri="${rIdx}" data-gi="${gi}" data-gk="adv"></td>
-    <td>${r.groups.length > 1 ? `<button class="btn small" data-act="fgdel" data-ri="${rIdx}" data-i="${gi}">Remove</button>` : ""}</td></tr>`).join("");
+    <td>${r.groups.length > 1 ? `<button class="btn small" data-act="fgdel" data-ri="${rIdx}" data-i="${gi}">ลบ</button>` : ""}</td></tr>`).join("");
   let slotsHtml = "";
   if (prev) {
     const prevQ = roundQualifiers(prev), rSize = r.groups.reduce((s, g) => s + (g.size > 0 ? g.size : 0), 0);
     if (prevQ.length >= 2 && rSize === prevQ.length) {
       const buckets = resolveRoundGroupSlots(f, rIdx), opts = prevQ.map(srcKey), custom = r.groups.some((g) => Array.isArray(g.srcs));
-      slotsHtml = `<div class="fsub"><div class="h3"><span>Slot assignment (${custom ? "Custom" : "Auto"})</span><button class="btn small" data-act="rauto" data-ri="${rIdx}">Auto assign</button></div>
-        <div class="fslots-grp">${r.groups.map((g, gi) => `<div class="fslots-row"><b>Group ${g.grp} :</b>${(buckets[gi] || []).map((k, si) =>
+      slotsHtml = `<div class="fsub"><div class="h3"><span>การวางสาย (${custom ? "กำหนดเอง" : "อัตโนมัติ"})</span><button class="btn small" data-act="rauto" data-ri="${rIdx}">วางอัตโนมัติ</button></div>
+        <div class="fslots-grp">${r.groups.map((g, gi) => `<div class="fslots-row"><b>กลุ่ม ${g.grp} :</b>${(buckets[gi] || []).map((k, si) =>
           `<select data-rslot="${rIdx}:${gi}:${si}">${opts.map((o) => `<option value="${esc(o)}" ${o === k ? "selected" : ""}>${esc(slotLabel(o))}</option>`).join("")}</select>`).join("")}</div>`).join("")}</div></div>`;
     } else if (prevQ.length >= 2) {
-      slotsHtml = `<div class="muted" style="margin-top:8px">Match total group slots (${rSize}) to ${stageLabel(prev.id)} qualifiers (${prevQ.length}) to edit slot placement</div>`;
+      slotsHtml = `<div class="muted" style="margin-top:8px">ปรับจำนวนช่องรวมในกลุ่ม (${rSize}) ให้เท่ากับทีมที่ผ่านจาก ${stageLabel(prev.id)} (${prevQ.length}) ก่อน จึงจะแก้การวางสายได้</div>`;
     }
   }
   return `<div class="fround"><div class="fh"><h3>${stageLabel(r.id)}</h3>
     <label>Bo <select data-rgbo="${rIdx}">${boOpts(r.bo)}</select></label>
-    ${f.rounds.length > 1 ? `<button class="btn small" data-act="frdel" data-ri="${rIdx}">Remove round</button>` : ""}</div>
-    <table class="tbl fg"><thead><tr><th>Group</th><th>Teams</th><th>Advance</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="btns"><button class="btn small" data-act="fgadd" data-ri="${rIdx}" ${totG >= 26 ? "disabled" : ""}>+ Add group</button></div>
+    ${f.rounds.length > 1 ? `<button class="btn small" data-act="frdel" data-ri="${rIdx}">ลบรอบ</button>` : ""}</div>
+    <table class="tbl fg"><thead><tr><th>กลุ่ม</th><th>ทีม</th><th>เข้ารอบ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="btns"><button class="btn small" data-act="fgadd" data-ri="${rIdx}" ${totG >= 26 ? "disabled" : ""}>+ เพิ่มกลุ่ม</button></div>
     ${slotsHtml}</div>`;
 }
 
@@ -400,15 +407,15 @@ function koRoundHtml(f, ko, built = null) {
     const sel = (i, v) => `<select data-kos="${st.stage}:${i}" data-sub="${st.subIdx}">${opts.map((k) => `<option value="${esc(k)}" ${k === (v || "") ? "selected" : ""}>${esc(slotLabel(k))}</option>`).join("")}</select>`;
     return `<div class="fsub"><div class="fh"><b>${esc(st.label)}</b>
       <label>Bo <select data-kobo="${st.stage}">${boOpts(st.bo)}</select></label>
-      <span class="muted">${st.custom ? "Custom" : "Auto"}</span>
-      <button class="btn small" data-act="fslotauto" data-st="${st.stage}">Auto arrange</button></div>
-      <div class="slots">${pairs.map(([i, red, blue]) => `<div class="pr">${sel(i, red)}<span>vs</span>${sel(i + 1, blue)}</div>`).join("")}</div></div>`;
+      <span class="muted">${st.custom ? "กำหนดเอง" : "อัตโนมัติ"}</span>
+      <button class="btn small" data-act="fslotauto" data-st="${st.stage}">จัดอัตโนมัติ</button></div>
+      <div class="slots">${pairs.map(([i, red, blue]) => `<div class="pr">${sel(i, red)}<span>พบ</span>${sel(i + 1, blue)}</div>`).join("")}</div></div>`;
   }).join("");
-  return `<div class="fround"><div class="fh"><h3>Knockout</h3>
-    <label class="chk2"><input type="checkbox" data-kothird="1" ${ko.third ? "checked" : ""}>3rd place match</label>
-    ${b.koStages.length ? `<button class="btn small" data-act="fslotauto" data-st="">Reset all slots</button>` : ""}
-    ${f.rounds.length > 1 ? `<button class="btn small" data-act="frdelko">Remove Knockout</button>` : ""}</div>
-    ${subs || `<div class="muted">Need at least 2 advancing teams from the previous round</div>`}</div>`;
+  return `<div class="fround"><div class="fh"><h3>รอบแพ้คัดออก</h3>
+    <label class="chk2"><input type="checkbox" data-kothird="1" ${ko.third ? "checked" : ""}>มีคู่ชิงอันดับที่ 3</label>
+    ${b.koStages.length ? `<button class="btn small" data-act="fslotauto" data-st="">จัดใหม่ทุกช่อง</button>` : ""}
+    ${f.rounds.length > 1 ? `<button class="btn small" data-act="frdelko">ลบรอบแพ้คัดออก</button>` : ""}</div>
+    ${subs || `<div class="muted">ต้องมีทีมผ่านจากรอบก่อนอย่างน้อย 2 ทีม</div>`}</div>`;
 }
 
 let _cSrcCache = null;
@@ -427,7 +434,7 @@ function customSrcItems(f) {
 }
 function customSrcOpts(f, excludeCode, curVal) {
   const items = customSrcItems(f);
-  const parts = [`<option value="">Select</option>`];
+  const parts = [`<option value="">เลือก</option>`];
   let found = !curVal;
   for (const it of items) {
     if (excludeCode && it.code === excludeCode) continue;
@@ -439,7 +446,7 @@ function customSrcOpts(f, excludeCode, curVal) {
 }
 function slimSrcOpt(curVal) {
   const v = curVal || "";
-  return `<option value="${esc(v)}" selected>${esc(v ? slotLabel(v) : "Select")}</option>`;
+  return `<option value="${esc(v)}" selected>${esc(v ? slotLabel(v) : "เลือก")}</option>`;
 }
 
 function customFormatHtml(f) {
@@ -450,10 +457,10 @@ function customFormatHtml(f) {
     <td><select data-cgi="${gi}" data-cgk="stage">${stageOpts(g.stage)}</select></td>
     <td><input type="number" min="0" max="${g.srcs.length}" style="width:64px" value="${g.adv}" data-cgi="${gi}" data-cgk="adv"></td>
     <td><div class="fslots-row">${g.srcs.map((k, si) => `<select data-cgslot="${gi}:${si}" data-csrc="1">${slimSrcOpt(k)}</select>`).join("")}
-      <button class="btn small" data-act="cgslotadd" data-i="${gi}">+Slot</button>
-      ${g.srcs.length > 1 ? `<button class="btn small" data-act="cgslotdel" data-i="${gi}">-Slot</button>` : ""}</div></td>
-    <td><button class="btn small" data-act="cgrr" data-i="${gi}">Gen RR</button> <button class="btn small" data-act="cgdel" data-i="${gi}">Remove</button></td></tr>`).join("");
-  const gSelOpts = (cur) => `<option value="">None</option>` + cGrps.map((g) => `<option value="${g.grp}" ${g.grp === cur ? "selected" : ""}>Group ${g.grp}</option>`).join("");
+      <button class="btn small" data-act="cgslotadd" data-i="${gi}">+ช่อง</button>
+      ${g.srcs.length > 1 ? `<button class="btn small" data-act="cgslotdel" data-i="${gi}">-ช่อง</button>` : ""}</div></td>
+    <td><button class="btn small" data-act="cgrr" data-i="${gi}">สร้างคู่พบกันหมด</button> <button class="btn small" data-act="cgdel" data-i="${gi}">ลบ</button></td></tr>`).join("");
+  const gSelOpts = (cur) => `<option value="">ไม่มี</option>` + cGrps.map((g) => `<option value="${g.grp}" ${g.grp === cur ? "selected" : ""}>กลุ่ม ${g.grp}</option>`).join("");
   const mRows = cMs.map((m, mi) => `<tr><td class="num">${mi + 1}</td>
     <td><input maxlength="8" style="width:82px" value="${esc(m.code)}" data-cmi="${mi}" data-cmk="code"></td>
     <td><select data-cmi="${mi}" data-cmk="stage">${stageOpts(m.stage)}</select></td>
@@ -461,13 +468,13 @@ function customFormatHtml(f) {
     <td><select data-cmi="${mi}" data-cmk="bo">${boOpts(m.bo)}</select></td>
     <td><select data-cmi="${mi}" data-cmk="red" data-csrc="1">${slimSrcOpt(m.red)}</select></td>
     <td><select data-cmi="${mi}" data-cmk="blue" data-csrc="1">${slimSrcOpt(m.blue)}</select></td>
-    <td><button class="btn small" data-act="cmup" data-i="${mi}" ${mi === 0 ? "disabled" : ""}>Up</button>
-      <button class="btn small" data-act="cmdn" data-i="${mi}" ${mi === cMs.length - 1 ? "disabled" : ""}>Down</button>
-      <button class="btn small danger" data-act="cmdel" data-i="${mi}">Del</button></td></tr>`).join("");
-  return `<div class="fround"><div class="fh"><h3>Custom groups</h3><button class="btn small" data-act="cgadd" ${cGrps.length >= 26 ? "disabled" : ""}>+ Add group</button></div>
-    ${cGrps.length ? `<div class="tw"><table class="tbl ctbl"><thead><tr><th>Group</th><th>Stage</th><th>Advance</th><th>Team slots</th><th></th></tr></thead><tbody>${gRows}</tbody></table></div>` : `<div class="muted">No custom groups</div>`}</div>
-    <div class="fround"><div class="fh"><h3>Custom matches (${cMs.length})</h3><button class="btn small" data-act="cmadd" ${cMs.length >= 400 ? "disabled" : ""}>+ Add match</button></div>
-    <div class="tw"><table class="tbl ctbl"><thead><tr><th>#</th><th>Code</th><th>Stage</th><th>Group</th><th>Bo</th><th>Red</th><th>Blue</th><th></th></tr></thead><tbody>${mRows}</tbody></table></div></div>`;
+    <td><button class="btn small" data-act="cmup" data-i="${mi}" ${mi === 0 ? "disabled" : ""}>ขึ้น</button>
+      <button class="btn small" data-act="cmdn" data-i="${mi}" ${mi === cMs.length - 1 ? "disabled" : ""}>ลง</button>
+      <button class="btn small danger" data-act="cmdel" data-i="${mi}">ลบ</button></td></tr>`).join("");
+  return `<div class="fround"><div class="fh"><h3>กลุ่มที่กำหนดเอง</h3><button class="btn small" data-act="cgadd" ${cGrps.length >= 26 ? "disabled" : ""}>+ เพิ่มกลุ่ม</button></div>
+    ${cGrps.length ? `<div class="tw"><table class="tbl ctbl"><thead><tr><th>กลุ่ม</th><th>รอบ</th><th>เข้ารอบ</th><th>ช่องทีม</th><th></th></tr></thead><tbody>${gRows}</tbody></table></div>` : `<div class="muted">ยังไม่มีกลุ่ม</div>`}</div>
+    <div class="fround"><div class="fh"><h3>คู่ที่กำหนดเอง (${cMs.length})</h3><button class="btn small" data-act="cmadd" ${cMs.length >= 400 ? "disabled" : ""}>+ เพิ่มคู่</button></div>
+    <div class="tw"><table class="tbl ctbl"><thead><tr><th>#</th><th>รหัส</th><th>รอบ</th><th>กลุ่ม</th><th>Bo</th><th>แดง</th><th>น้ำเงิน</th><th></th></tr></thead><tbody>${mRows}</tbody></table></div></div>`;
 }
 
 // ---------- Quick setup : the few settings most events need. Details stay in a collapsed section ----------
@@ -601,45 +608,45 @@ function fmtPreviewHtml(f) {
 function fmtCard(played) {
   const f = fmtEdit(), isCustom = Array.isArray(f.customMatches), ko = koOf(f), gRounds = f.rounds.filter((r) => r.type === "groups");
   const topBar = `<div class="fh">
-    ${isCustom ? `<label>Teams <input type="number" min="2" max="64" value="${f.teams}" data-fk="teams" style="width:76px"></label>
-      <button class="btn small" data-act="fmtauto">Back to auto builder</button>`
-      : `${!gRounds.length ? `<label>Teams <input type="number" min="2" max="64" value="${f.teams}" data-fk="teams" style="width:76px"></label>` : ""}
-      <button class="btn small" data-act="fraddg" ${totalGroupsCount(f) >= 26 ? "disabled" : ""}>+ Group round</button>
-      ${!ko ? `<button class="btn small" data-act="fraddko">+ Knockout</button>` : ""}
-      <button class="btn small" data-act="fmtcustom">Customize matches</button>`}</div>`;
+    ${isCustom ? `<label>จำนวนทีม <input type="number" min="2" max="64" value="${f.teams}" data-fk="teams" style="width:76px"></label>
+      <button class="btn small" data-act="fmtauto">กลับไปใช้ตัวสร้างอัตโนมัติ</button>`
+      : `${!gRounds.length ? `<label>จำนวนทีม <input type="number" min="2" max="64" value="${f.teams}" data-fk="teams" style="width:76px"></label>` : ""}
+      <button class="btn small" data-act="fraddg" ${totalGroupsCount(f) >= 26 ? "disabled" : ""}>+ รอบแบ่งกลุ่ม</button>
+      ${!ko ? `<button class="btn small" data-act="fraddko">+ รอบแพ้คัดออก</button>` : ""}
+      <button class="btn small" data-act="fmtcustom">จัดคู่เอง</button>`}</div>`;
   const built = isCustom ? null : buildFormat(f);
   const body = isCustom ? customFormatHtml(f) : f.rounds.map((r, ri) => (r.type === "groups" ? groupRoundHtml(f, r, ri) : koRoundHtml(f, r, built))).join("");
   return `<div class="card fmtc">${quickHtml(f, built)}<div id="fsum">${fmtSummary(f, built)}</div>
     ${fmtPreviewHtml(f)}
     <details class="fdet" ${fmtDetOpen ? "open" : ""}><summary>ตั้งค่าละเอียด : ขนาดแต่ละกลุ่ม หลายรอบกลุ่ม จัดคู่และสายเอง</summary>${topBar}${body}</details>
-    <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>Apply format</button><button class="btn" data-act="fmtundo">Undo changes</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้อง Reset ในแท็บ Settings ก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">Apply จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
+    <div class="btns"><button class="btn primary" data-act="fmtapply" ${played ? "disabled" : ""}>ใช้รูปแบบนี้</button><button class="btn" data-act="fmtundo">ยกเลิกการแก้</button>${played ? `<span class="muted">มีผลการแข่งแล้ว ต้องล้างผลในแท็บตั้งค่าก่อนเปลี่ยนรูปแบบ</span>` : `<span class="muted">กดใช้รูปแบบนี้จะสร้างคู่ใหม่ทั้งหมด เวลานัดเดิมจะหาย ชื่อทีมยังอยู่</span>`}</div></div>`;
 }
 function redrawFmt() { const el = document.querySelector(".fmtc"); if (el) { el.outerHTML = fmtCard([...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}))); const n = document.querySelector(".fmtc"); if (n) fitBrackets(n); } }
 function teamsView() {
   const t = teamsArr(), draw = event().tv_mode === "draw", played = [...T.a2_game.values()].some((g) => g.status !== "void" && !isPractice(match(g.match_code) || {}));
   const r1 = groups().filter((g) => g.stage === "r1" && g.srcs?.every((x) => x && x.seed != null));
   const cols = r1.length ? r1 : [{ grp: "", srcs: t.map((x) => ({ seed: x.seed })) }];
-  return `<div class="h2"><h2>Format</h2><span>เพิ่มหรือลดรอบกลุ่ม ปรับขนาดแต่ละกลุ่มไม่เท่ากันได้ แก้สายการแข่งได้ทุกรอบ หรือกำหนดแมตช์เองทั้งหมด</span></div>
+  return `<div class="h2"><h2>รูปแบบการแข่ง</h2><span>เพิ่มหรือลดรอบกลุ่ม ปรับขนาดแต่ละกลุ่มไม่เท่ากันได้ แก้สายการแข่งได้ทุกรอบ หรือกำหนดแมตช์เองทั้งหมด</span></div>
    ${fmtCard(played)}
-   <div class="h2" style="margin-top:20px"><h2>Teams</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง ใช้ Shuffle เพื่อจับสาย</span></div>
-   <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? esc(grpName(g.grp)) : "Teams (seed order)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="Team ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>Absent</label></div>`; }).join("")}</div>`).join("")}</div>
-   <div class="btns"><button class="btn primary" data-act="saveteams">Save teams</button><button class="btn" data-act="shuffle">Shuffle</button></div>
-   <div class="h2" style="margin-top:24px"><h2>Draw on Dashboard</h2><span>${draw ? "Dashboard อยู่ในโหมด Draw" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม Dashboard จะเผยชื่อทีมทีละทีม"}</span></div>
-   <div class="btns"><button class="btn primary" data-act="drawstart">Start draw</button><button class="btn" data-act="tvauto">Back to Auto</button></div>`;
+   <div class="h2" style="margin-top:20px"><h2>ทีม</h2><span>เลขหน้าชื่อคือลำดับ ทีมอยู่สายตามตำแหน่ง กดสุ่มลำดับเพื่อจับสาย</span></div>
+   <div class="teams">${cols.map((g) => `<div class="card grp"><h2>${g.grp ? esc(grpName(g.grp)) : "ทีม (ตามลำดับ)"}</h2>${g.srcs.map((x) => { const sd = x.seed, tm = t.find((y) => y.seed === sd); return `<div><span class="muted">${sd}</span><input data-seed="${sd}" value="${esc(tm?.name || "")}" placeholder="ทีม ${sd}" maxlength="40"><label class="ab"><input type="checkbox" data-abs="${sd}" ${tm?.absent ? "checked" : ""}>ไม่มา</label></div>`; }).join("")}</div>`).join("")}</div>
+   <div class="btns"><button class="btn primary" data-act="saveteams">บันทึกชื่อทีม</button><button class="btn" data-act="shuffle">สุ่มลำดับ</button></div>
+   <div class="h2" style="margin-top:24px"><h2>จับสายบนจอ Dashboard</h2><span>${draw ? "จอ Dashboard อยู่ในโหมดจับสาย" : "บันทึกชื่อทีมก่อน แล้วกดเริ่ม จอ Dashboard จะเผยชื่อทีมทีละทีม"}</span></div>
+   <div class="btns"><button class="btn primary" data-act="drawstart">เริ่มจับสาย</button><button class="btn" data-act="tvauto">กลับไปโหมดอัตโนมัติ</button></div>`;
 }
 
 // ---------- Dashboard tab ----------
 function tvView() {
   lay = liveLayout(event().dash_layout?.live);
-  const ev = event(), M = [["auto", "Auto", "มีคู่บนสนามใช้ Live ไม่มีใช้ Bracket จบคู่ชิงขึ้น Champion เอง"], ["live", "Live", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "Bracket", "ตารางสายเต็มจอ พร้อม Up next"], ["standings", "Standings", "ตารางคะแนนทุกสาย"], ["schedule", "Schedule", "ลำดับคู่ เวลานัด สถานะ"], ["draw", "Draw", "เผยชื่อทีมทีละทีม"], ["champion", "Champion", "ใช้ได้เมื่อจบคู่ชิง"]];
-  return `<div class="h2"><h2>Dashboard mode</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้ Auto</span></div>
-   <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">On</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>Use</button></div>`).join("")}</div>
-   <div class="h2" style="margin-top:22px"><h2>Bracket shows</h2><span>ใช้กับตารางสายทุกจอ Auto แสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง ${bracketMode() === "practice" ? "Practice" : "Competition"}</span></div>
-   <div class="card"><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${t}</button>`).join("")}</div></div>
-   <div class="h2" style="margin-top:22px"><h2>Live layout</h2><span>ลากเพื่อย้าย ลากมุมขวาล่างเพื่อลดขยาย ติ๊กเพื่อซ่อนหรือแสดง แล้วกด Save layout</span></div>
-   <div class="card"><div class="layc">${PANELS.map(([k, t]) => `<label class="chk2"><input type="checkbox" data-layon="${k}" ${lay[k].on ? "checked" : ""}>${t}</label>`).join("")}</div>
+  const ev = event(), M = [["auto", "อัตโนมัติ", "มีคู่บนสนามใช้หน้าถ่ายทอดสด ไม่มีใช้ตารางสาย จบคู่ชิงขึ้นหน้าแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ รอบที่แข่ง และตารางสายย่อ"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "ตารางคะแนนทุกสาย"], ["schedule", "ตารางเวลา", "ลำดับคู่ เวลานัด สถานะ"], ["draw", "จับสาย", "เผยชื่อทีมทีละทีม"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  return `<div class="h2"><h2>โหมดจอ Dashboard</h2><span>เปลี่ยนแล้วจอเปลี่ยนตามทันที ปกติใช้อัตโนมัติ</span></div>
+   <div class="grid5">${M.map(([k, t, d]) => `<div class="card ${ev.tv_mode === k ? "st-ready" : ""}"><h2>${t}${ev.tv_mode === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</h2><p class="muted">${d}</p><button class="btn ${ev.tv_mode === k ? "" : "primary"}" data-act="tvmode" data-m="${k}" ${ev.tv_mode === k ? "disabled" : ""}>ใช้</button></div>`).join("")}</div>
+   <div class="h2" style="margin-top:22px"><h2>ตารางสายแสดง</h2><span>ใช้กับตารางสายทุกจอ อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</span></div>
+   <div class="card"><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div></div>
+   <div class="h2" style="margin-top:22px"><h2>ผังจอถ่ายทอดสด</h2><span>ลากเพื่อย้าย ลากมุมขวาล่างเพื่อลดขยาย ติ๊กเพื่อซ่อนหรือแสดง แล้วกดบันทึกผัง</span></div>
+   <div class="card"><div class="layc">${PANELS.map(([k, t]) => `<label class="chk2"><input type="checkbox" data-layon="${k}" ${lay[k].on ? "checked" : ""}>${PANEL_TH[k] || t}</label>`).join("")}</div>
      <div class="lay" id="lay"></div>
-     <div class="btns"><button class="btn primary" data-act="laysave">Save layout</button><button class="btn" data-act="layundo">Undo changes</button><button class="btn" data-act="layreset">Reset to default</button><a class="btn" href="../dashboard/" target="_blank" rel="noopener">Open Dashboard</a></div></div>`;
+     <div class="btns"><button class="btn primary" data-act="laysave">บันทึกผัง</button><button class="btn" data-act="layundo">ยกเลิกการแก้</button><button class="btn" data-act="layreset">กลับค่าเริ่มต้น</button><a class="btn" href="../dashboard/" target="_blank" rel="noopener">เปิดจอ Dashboard</a></div></div>`;
 }
 // ---------- Live layout editor ----------
 let lay = null, drag = null;
@@ -659,7 +666,7 @@ function layMock(k) {
 function paintLay() {
   const el = $("lay"); if (!el || !lay) return;
   el.innerHTML = PANELS.filter(([k]) => lay[k].on).map(([k]) => { const p = lay[k];
-    return `<div class="lbx lbx-${k}" data-lk="${k}" style="left:${(p.x / STAGE.w) * 100}%;top:${(p.y / STAGE.h) * 100}%;width:${(p.w / STAGE.w) * 100}%;height:${(p.h / STAGE.h) * 100}%">${layMock(k)}<div class="ltag"><b>${LAB[k]}</b><span>${p.w}×${p.h}</span></div><i data-rs="${k}" title="Resize"></i></div>`; }).join("") + `<div class="lhead">Header (fixed)</div>`;
+    return `<div class="lbx lbx-${k}" data-lk="${k}" style="left:${(p.x / STAGE.w) * 100}%;top:${(p.y / STAGE.h) * 100}%;width:${(p.w / STAGE.w) * 100}%;height:${(p.h / STAGE.h) * 100}%">${layMock(k)}<div class="ltag"><b>${PANEL_TH[k] || LAB[k]}</b><span>${p.w}×${p.h}</span></div><i data-rs="${k}" title="ปรับขนาด"></i></div>`; }).join("") + `<div class="lhead">หัวจอ (คงที่)</div>`;
   el.style.setProperty("--sc", el.clientWidth / STAGE.w); fitLayBracket();
   document.querySelectorAll("[data-layon]").forEach((c) => (c.checked = lay[c.dataset.layon].on));
 }
@@ -691,27 +698,27 @@ document.addEventListener("change", (e) => { if (e.target.dataset && e.target.da
 function settingsView() {
   const ev = event(), base = new URL("../", location.href).href;
   const link = (p, t, d) => `<div class="lk"><div data-qr="${base}${p}/"></div><div><b>${t}</b><div class="muted">${d}</div><code>${base}${p}/</code><div class="btns"><button class="btn small" data-act="copy" data-u="${base}${p}/">คัดลอกลิงก์</button><a class="btn small" style="text-decoration:none" href="${base}${p}/" target="_blank" rel="noopener">เปิด</a></div></div></div>`;
-  return `<div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>Name</h2></div><div class="form">
+  return `<div class="cols"><div class="stack"><div class="card"><div class="h2"><h2>ชื่องาน</h2></div><div class="form">
      <label>ชื่องาน แสดงบนหัว Dashboard และหน้าแอดมิน<input id="en" value="${esc(ev.name)}" maxlength="80"></label>
-     <button class="btn primary" data-act="savename">Save name</button></div></div>
-    <div class="card"><div class="h2"><h2>Smart Logistics Challenge mode</h2><span class="pill ${ev.rules_mode !== false ? "ready" : "locked"}">${ev.rules_mode !== false ? "On" : "Off"}</span></div>
-     <p class="muted" style="margin:0 0 10px">${ev.rules_mode !== false ? "เปิด: กรรมการใช้ Setup, Checklist, นาฬิกา 1:30 และกดเกณฑ์ตามกติกาข้อ 6" : "ปิด: กรรมการกดแค่ว่าใครชนะแต่ละเกม ไม่มีนาฬิกาและ Checklist"}</p>
-     <label class="switch"><input type="checkbox" id="rm" ${ev.rules_mode !== false ? "checked" : ""}><span></span><b>Use Smart Logistics Challenge rules</b></label></div>
-    <div class="card"><div class="h2"><h2>Timing</h2><span>ใช้เมื่อเปิดโหมดกติกา</span></div><div class="form">
+     <button class="btn primary" data-act="savename">บันทึกชื่อ</button></div></div>
+    <div class="card"><div class="h2"><h2>โหมดกติกา Smart Logistics Challenge</h2><span class="pill ${ev.rules_mode !== false ? "ready" : "locked"}">${ev.rules_mode !== false ? "เปิด" : "ปิด"}</span></div>
+     <p class="muted" style="margin:0 0 10px">${ev.rules_mode !== false ? "เปิด : กรรมการใช้ Setup, Checklist, นาฬิกา 1:30 และกดเกณฑ์ตามกติกาข้อ 6" : "ปิด : กรรมการกดแค่ว่าใครชนะแต่ละเกม ไม่มีนาฬิกาและ Checklist"}</p>
+     <label class="switch"><input type="checkbox" id="rm" ${ev.rules_mode !== false ? "checked" : ""}><span></span><b>ใช้กติกา Smart Logistics Challenge</b></label></div>
+    <div class="card"><div class="h2"><h2>เวลา</h2><span>ใช้เมื่อเปิดโหมดกติกา</span></div><div class="form">
      <div class="two"><label>เวลา Setup (วินาที)<input id="es" type="number" min="0" value="${Math.round(ev.setup_ms / 1000)}"></label><label>เวลาแข่งต่อเกม (วินาที)<input id="eg" type="number" min="10" value="${Math.round(ev.game_ms / 1000)}"></label></div>
      <label>นับถอยหลังก่อน GO (วินาที)<input id="ec" type="number" min="0" max="10" value="${Math.round((ev.countdown_ms ?? 3000) / 1000)}"></label>
-     <button class="btn primary" data-act="saveev">Save</button></div></div>
-    <div class="card"><div class="h2"><h2>Password and PIN</h2></div><div class="form"><div class="two"><label>รหัสผ่านแอดมินใหม่<input id="np" type="password" autocomplete="new-password" minlength="6"></label><label>PIN กรรมการใหม่<input id="ni" inputmode="numeric" pattern="[0-9]{4,8}"></label></div>
+     <button class="btn primary" data-act="saveev">บันทึก</button></div></div>
+    <div class="card"><div class="h2"><h2>รหัสผ่านและ PIN</h2></div><div class="form"><div class="two"><label>รหัสผ่านแอดมินใหม่<input id="np" type="password" autocomplete="new-password" minlength="6"></label><label>PIN กรรมการใหม่<input id="ni" inputmode="numeric" pattern="[0-9]{4,8}"></label></div>
      <button class="btn" data-act="savepw">เปลี่ยน (กรอกเฉพาะช่องที่ต้องการเปลี่ยน)</button></div></div>
-    <div class="card"><div class="h2"><h2>Documents</h2><span>กติกา FAQ และไฟล์อื่น</span></div>
-     <label class="switch"><input type="checkbox" id="dref" ${ev.docs_ref !== false ? "checked" : ""}><span></span><b>Referees can open documents</b></label>
-     <div id="doclist" class="doclist"><p class="muted">Loading</p></div>
+    <div class="card"><div class="h2"><h2>เอกสาร</h2><span>กติกา FAQ และไฟล์อื่น</span></div>
+     <label class="switch"><input type="checkbox" id="dref" ${ev.docs_ref !== false ? "checked" : ""}><span></span><b>กรรมการเปิดดูเอกสารได้</b></label>
+     <div id="doclist" class="doclist"><p class="muted">กำลังโหลด</p></div>
      <div class="form" style="margin-top:12px"><div class="two"><label>ชื่อเอกสาร<input id="dt" maxlength="80" placeholder="เช่น กติกา, FAQ"></label><label>ไฟล์ (PDF หรือรูป ไม่เกิน 10 MB)<input id="df" type="file" accept=".pdf,image/*"></label></div>
-     <button class="btn primary" data-act="docadd">Upload</button></div></div>
-    <div class="card"><div class="h2"><h2>Data</h2></div><div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
-     <div class="form" style="margin-top:14px"><label>ล้างเฉพาะผลการแข่ง เก็บชื่อทีม ตารางคู่ และเวลานัดไว้ ใช้หลังกดลองระบบ<select id="rrs"><option value="all">ทุกคู่ (คู่ซ้อมและคู่แข่งจริง)</option><option value="practice">เฉพาะคู่ซ้อม</option><option value="comp">เฉพาะคู่แข่งจริง</option></select></label><button class="btn" data-act="resetres">Reset results only</button></div>
+     <button class="btn primary" data-act="docadd">อัปโหลด</button></div></div>
+    <div class="card"><div class="h2"><h2>ข้อมูล</h2></div><div class="btns"><button class="btn" data-act="export">ดาวน์โหลดผลทั้งหมด (JSON)</button></div>
+     <div class="form" style="margin-top:14px"><label>ล้างเฉพาะผลการแข่ง เก็บชื่อทีม ตารางคู่ และเวลานัดไว้ ใช้หลังกดลองระบบ<select id="rrs"><option value="all">ทุกคู่ (คู่ซ้อมและคู่แข่งจริง)</option><option value="practice">เฉพาะคู่ซ้อม</option><option value="comp">เฉพาะคู่แข่งจริง</option></select></label><button class="btn" data-act="resetres">ล้างเฉพาะผล</button></div>
      <div class="form" style="margin-top:14px"><label>เริ่มงานใหม่ ลบผลและเกมทั้งหมด (พิมพ์ รีเซ็ต เพื่อยืนยัน)<input id="rc" placeholder="รีเซ็ต"></label><button class="btn danger" data-act="reset">ลบผลทั้งหมดและเริ่มใหม่</button><span class="muted">ชื่อทีมและการตั้งค่าไม่ถูกลบ แต่เวลานัดทุกคู่จะถูกล้าง</span></div></div></div>
-   <div class="card links"><div class="h2"><h2>Links</h2></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "Referee", "เครื่องกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "Admin", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
+   <div class="card links"><div class="h2"><h2>ลิงก์</h2></div>${link("dashboard", "Dashboard", "เปิดบนโน้ตบุ๊กที่ต่อจอ แล้วแตะเต็มจอเพื่อเปิดเสียง")}${link("ref", "กรรมการ", "เครื่องกรรมการ 1 เครื่อง ต้องใช้ PIN")}${link("admin", "แอดมิน", "สำหรับผู้จัดเท่านั้น")}</div></div>`;
 }
 async function loadDocs() {
   const el = $("doclist"); if (!el) return;
@@ -725,12 +732,12 @@ function afterForm() {
 
 // ---------- Log tab ----------
 let logRows = [], logF = "";
-const AL = { "queue.call": "Call match", "queue.clear": "Clear field", "ref.transfer": "Transfer referee", "flow.setup_start": "Start setup", "flow.setup_skip": "Skip setup", "flow.go": "Start", "flow.false_start": "False start", "flow.reset": "Reset game", "game.confirm": "Confirm result", "match.absent_req": "Absent request", "mark.undo": "Undo", "mark.add": "Admin add event", "mark.void": "Admin delete event", "mark.unvoid": "Admin restore event", "mark.edit": "Admin edit event", "mark.exit_first": "Left red box first", "mark.lift_first": "First lift", "mark.park": "Stand +1", "mark.unpark": "Stand -1", "mark.complete": "Mission complete", "mark.retry": "Retry", "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง", "match.forfeit": "แพ้บาย", "team.absent": "ทีมไม่มา",
+const AL = { "queue.call": "เรียกคู่", "queue.clear": "เอาลงจากสนาม", "ref.transfer": "ย้ายเครื่องกรรมการ", "flow.setup_start": "เริ่ม Setup", "flow.setup_skip": "ข้าม Setup", "flow.go": "เริ่มแข่ง", "flow.false_start": "ออกตัวก่อน", "flow.reset": "รีเซ็ตเกม", "game.confirm": "รับรองผล", "match.absent_req": "ขอแพ้บาย", "mark.undo": "ย้อนกลับ", "mark.add": "แอดมินเพิ่มเหตุการณ์", "mark.void": "แอดมินลบเหตุการณ์", "mark.unvoid": "แอดมินกู้เหตุการณ์", "mark.edit": "แอดมินแก้เหตุการณ์", "mark.exit_first": "ออกจากกรอบแดงก่อน", "mark.lift_first": "ยกแท่นแรก", "mark.park": "จอดแท่น +1", "mark.unpark": "จอดแท่น -1", "mark.complete": "ภารกิจสำเร็จ", "mark.retry": "Retry", "reset.results": "ล้างเฉพาะผล", "practice.set": "ตั้งคู่ซ้อม", "match.postpone": "ไว้ทีหลัง", "queue.assign": "เปิดคิว", "queue.unassign": "ปิดคิว", "game.patch": "แก้ผลเกม", "game.add": "เพิ่มเกม", "game.void": "ลบเกม", "event.update": "แก้ตั้งค่า", "schedule.set": "ตั้งเวลา", reset: "รีเซ็ต", "group.tiebreak": "ตัดสินอันดับ", "teams.set": "แก้ชื่อทีม", "match.swap": "สลับฝั่ง", "match.forfeit": "แพ้บาย", "team.absent": "ทีมไม่มา",
   "timer.start_setup": "เริ่ม Setup", "timer.start_game": "เริ่มแข่ง", "timer.pause": "หยุดนาฬิกา", "timer.resume": "เล่นต่อ", "timer.reset": "รีเซ็ตนาฬิกา",
   "game.pattern": "เลือกแบบสนาม", "game.parked_inc": "จอดเพิ่ม", "game.parked_dec": "จอดลด", "game.lift": "ยกแท่นแรก", "game.exit": "ออกจากกรอบแดง", "game.clear_lift": "ล้างยกแท่น", "game.clear_exit": "ล้างออกกรอบ", "game.finish": "จบเกม", "game.judge": "กรรมการตัดสิน" };
-const actorTh = (a) => (a === "admin" ? "แอดมิน" : a === "system:auto" ? "ระบบ เปิดคิวตามเวลา" : String(a).startsWith("ref:") ? "Referee" : a);
+const actorTh = (a) => (a === "admin" ? "แอดมิน" : a === "system:auto" ? "ระบบ เปิดคิวตามเวลา" : String(a).startsWith("ref:") ? "กรรมการ" : a);
 function logView() {
-  return `<div class="h2"><h2>Log</h2><select id="lgf" data-act-change="lgf"><option value="">All</option><option value="admin" ${logF === "admin" ? "selected" : ""}>Admin</option><option value="ref" ${logF === "ref" ? "selected" : ""}>Referee</option></select><button class="btn small" data-act="logload">Reload</button></div><div class="tw"><table class="tbl"><thead><tr><th>เวลา</th><th>ใคร</th><th>ทำอะไร</th><th>กับ</th></tr></thead><tbody>${logRows.filter((r) => !logF || (logF === "ref" ? String(r.actor).startsWith("ref:") : r.actor === logF)).map((r) => `<tr><td class="num">${new Date(r.at).toLocaleTimeString("th-TH")}</td><td>${esc(actorTh(r.actor))}</td><td>${esc(AL[r.action] || r.action)}</td><td>${esc(r.target || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">ยังไม่มีรายการ</td></tr>`}</tbody></table></div>`;
+  return `<div class="h2"><h2>บันทึกการทำงาน</h2><select id="lgf" data-act-change="lgf"><option value="">ทั้งหมด</option><option value="admin" ${logF === "admin" ? "selected" : ""}>แอดมิน</option><option value="ref" ${logF === "ref" ? "selected" : ""}>กรรมการ</option></select><button class="btn small" data-act="logload">โหลดใหม่</button></div><div class="tw"><table class="tbl"><thead><tr><th>เวลา</th><th>ใคร</th><th>ทำอะไร</th><th>กับ</th></tr></thead><tbody>${logRows.filter((r) => !logF || (logF === "ref" ? String(r.actor).startsWith("ref:") : r.actor === logF)).map((r) => `<tr><td class="num">${new Date(r.at).toLocaleTimeString("th-TH")}</td><td>${esc(actorTh(r.actor))}</td><td>${esc(AL[r.action] || r.action)}</td><td>${esc(r.target || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">ยังไม่มีรายการ</td></tr>`}</tbody></table></div>`;
 }
 async function loadLog() { logRows = (await act(() => adm("a2_adm_audit", { p_limit: 200 }))) || []; redraw(); }
 
@@ -741,7 +748,7 @@ function clocks() {
   const f = field(1); if (!f) return; const ck = clockV3(f);
   const clkTxt = ck.phase === "countdown" ? String(ck.count) : ck.phase === "stopped" ? fmtMs1(ck.elapsed) : fmtMs1(ck.ms);
   const warn = ck.phase === "game" && ck.ms <= 10000;
-  const phTxt = PHASE_EN[ck.phase] + (ck.phase === "stopped" ? " (Mission complete)" : "");
+  const phTxt = PH_TH[ck.phase] + (ck.phase === "stopped" ? " (ภารกิจสำเร็จ)" : "");
   document.querySelectorAll("[data-clk]").forEach((el) => {
     if (el._clk !== clkTxt) { el._clk = clkTxt; el.textContent = clkTxt; }
     if (el._warn !== warn) { el._warn = warn; el.classList.toggle("warn", warn); }
@@ -755,23 +762,23 @@ function clocks() {
 const H = {
   async open(b) {
     const c = b.dataset.c, M = match(c);
-    if (!confirm(`Call ${c} to field\n${sideName(M, "red")} vs ${sideName(M, "blue")}`)) return;
+    if (!confirm(`เรียก ${c} ขึ้นสนาม\n${sideName(M, "red")} พบ ${sideName(M, "blue")}`)) return;
     await act(() => adm("a2_adm_call", { p_code: c }), `เรียก ${c} ขึ้นสนามแล้ว`);
     if (dlg.open && dlgCode === c) dlg.innerHTML = dlgHtml(c);
   },
   async close(b) {
     const M = match(b.dataset.c);
-    if (!confirm(M.status === "done" ? "Clear field" : `เอาคู่ ${M.code} ลงจากสนามทั้งที่ยังไม่จบ\nเกมที่ยังไม่เริ่มจะถูกลบ`)) return;
-    await act(() => adm("a2_adm_clear", {}), "Field cleared");
+    if (!confirm(M.status === "done" ? "เอาคู่นี้ลงจากสนาม" : `เอาคู่ ${M.code} ลงจากสนามทั้งที่ยังไม่จบ\nเกมที่ยังไม่เริ่มจะถูกลบ`)) return;
+    await act(() => adm("a2_adm_clear", {}), "เอาลงจากสนามแล้ว");
   },
   async timer(b) {
     const a = b.dataset.a;
-    if (a === "false_start" && !confirm("False start ลบเหตุการณ์ทั้งหมดของรอบนี้ แล้วกลับไป Ready")) return;
+    if (a === "false_start" && !confirm("ออกตัวก่อน ลบเหตุการณ์ทั้งหมดของรอบนี้ แล้วกลับไปสถานะพร้อม")) return;
     if (a === "go" && !confirm("เริ่มนับถอยหลัง 3 2 1 แทนกรรมการ")) return;
     await act(() => adm("a2_adm_timer", { p_action: a }));
   },
-  async transfer() { if (!confirm("ปลดเครื่องกรรมการเดิม เครื่องที่เปิดหน้า Referee อยู่จะรับสิทธิ์แทนภายใน 10 วินาที")) return; await act(() => adm("a2_adm_ref_transfer", {}), "Referee released"); },
-  async approve(b) { const m = match(b.dataset.c), sd = b.dataset.s; if (!confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย ${Math.ceil(m.bo / 2)}-0`)) return; await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: sd }), "Forfeit approved"); },
+  async transfer() { if (!confirm("ปลดเครื่องกรรมการเดิม เครื่องที่เปิดหน้ากรรมการอยู่จะรับสิทธิ์แทนภายใน 10 วินาที")) return; await act(() => adm("a2_adm_ref_transfer", {}), "ปลดเครื่องกรรมการแล้ว"); },
+  async approve(b) { const m = match(b.dataset.c), sd = b.dataset.s; if (!confirm(`${sideName(m, sd)} ไม่มา ให้ ${sideName(m, sd === "red" ? "blue" : "red")} ชนะบาย ${Math.ceil(m.bo / 2)}-0`)) return; await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: sd }), "อนุมัติแพ้บายแล้ว"); },
   async postpone(b) { if (await act(() => adm("a2_adm_postpone", { p_code: b.dataset.c }), `ย้าย ${b.dataset.c} ไปท้ายคิวแล้ว`) !== undefined) { await loadAll(); redraw(); } },
   async ffundo(b) { await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: null }), "ยกเลิกแพ้บายแล้ว"); },
   async boall() {
@@ -795,20 +802,20 @@ const H = {
   },
   async noticehide() { if (await act(() => adm("a2_adm_event", { p: { notice_on: false } }), "ซ่อนประกาศแล้ว") !== undefined) { refreshTools(); redraw(); } },
   gotab(b) { const t = document.querySelector(`[data-tab="${b.dataset.t}"]`); if (t) t.click(); },
-  async reject(b) { await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: null }), "Request rejected"); },
+  async reject(b) { await act(() => adm("a2_adm_forfeit", { p_code: b.dataset.c, p_side: null }), "ไม่อนุมัติแล้ว"); },
   async mk(b) {
     const card = b.closest("[data-g]"), id = b.closest("[data-mid]").dataset.mid;
-    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: b.dataset.op, p_id: id }), "Updated"); dlg.innerHTML = dlgHtml(dlgCode);
+    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: b.dataset.op, p_id: id }), "อัปเดตแล้ว"); dlg.innerHTML = dlgHtml(dlgCode);
   },
   async mkedit(b) {
     const card = b.closest("[data-g]"), id = b.closest("[data-mid]").dataset.mid, v = prompt("เวลาใหม่ นับจาก GO (เช่น 0:12.5)"); if (v == null) return;
     const t = parseT(v); if (Number.isNaN(t)) return toast("รูปแบบเวลา 0:12.5", true);
-    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: "edit", p_id: id, p_t_ms: t }), "Updated"); dlg.innerHTML = dlgHtml(dlgCode);
+    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: "edit", p_id: id, p_t_ms: t }), "อัปเดตแล้ว"); dlg.innerHTML = dlgHtml(dlgCode);
   },
   async mkadd(b) {
     const card = b.closest("[data-g]"), q = (n) => card.querySelector(`[data-n="${n}"]`).value, t = parseT(q("t"));
     if (Number.isNaN(t)) return toast("รูปแบบเวลา 0:12.5", true);
-    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: "add", p_kind: q("kind"), p_side: q("side"), p_t_ms: t }), "Event added"); dlg.innerHTML = dlgHtml(dlgCode);
+    await act(() => adm("a2_adm_mark", { p_game: +card.dataset.g, p_op: "add", p_kind: q("kind"), p_side: q("side"), p_t_ms: t }), "เพิ่มเหตุการณ์แล้ว"); dlg.innerHTML = dlgHtml(dlgCode);
   },
   edit(b) { openDlg(b.dataset.c); },
   dclose() { dlg.close(); },
@@ -866,16 +873,16 @@ const H = {
   async fmtapply() {
     const f = fmtEdit(), err = validateFormat(f); if (err.length) return toast(err[0], true);
     const b = buildFormat(f);
-    const desc = Array.isArray(f.customMatches) ? `Custom (${f.teams} teams, ${b.matches.length} matches)`
-      : f.rounds.map((r) => r.type === "groups" ? `${stageLabel(r.id)} (${r.groups.map((g) => `${g.grp} ${g.size} adv ${g.adv}`).join(", ")})` : `Knockout${r.third ? " + 3P" : ""}`).join(", ");
-    if (!confirm(`Apply format : ${desc}\nสร้างคู่ใหม่ ${b.matches.length} คู่ แทนของเดิมทั้งหมด`)) return;
-    if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "Format applied") !== undefined) { fmt = null; await loadAll(); formTab = ""; render(); }
+    const desc = Array.isArray(f.customMatches) ? `กำหนดเอง (${f.teams} ทีม, ${b.matches.length} คู่)`
+      : f.rounds.map((r) => r.type === "groups" ? `${stageLabel(r.id)} (${r.groups.map((g) => `${g.grp} ${g.size} ทีม เข้ารอบ ${g.adv}`).join(", ")})` : `แพ้คัดออก${r.third ? " และชิงที่ 3" : ""}`).join(", ");
+    if (!confirm(`ใช้รูปแบบ : ${desc}\nสร้างคู่ใหม่ ${b.matches.length} คู่ แทนของเดิมทั้งหมด`)) return;
+    if (await act(() => adm("a2_adm_format", { p_format: b.format, p_groups: b.groups, p_matches: b.matches }), "ใช้รูปแบบใหม่แล้ว") !== undefined) { fmt = null; await loadAll(); formTab = ""; render(); }
   },
   fmtundo() { fmt = null; redrawFmt(); },
   fpoolshuffle() { quickApply({ ...quickOf(fmtEdit()), mode: "pool" }); redrawFmt(); },
   fquickreset() { quickApply({ ...quickOf(fmtDefaults()), mode: "gko" }); redrawFmt(); },
   fmtcustom() { fmt = materializeCustom(fmtEdit()); redrawFmt(); },
-  fmtauto() { if (!confirm("ทิ้งการแก้ไขแบบ Custom แล้วกลับไปใช้ตัวสร้างรอบอัตโนมัติ")) return; const f = fmtEdit(); f.customMatches = null; f.customGroups = null; redrawFmt(); },
+  fmtauto() { if (!confirm("ทิ้งการแก้ไขแบบกำหนดเองแล้วกลับไปใช้ตัวสร้างรอบอัตโนมัติ")) return; const f = fmtEdit(); f.customMatches = null; f.customGroups = null; redrawFmt(); },
   fraddg() {
     const f = fmtEdit(), gRounds = f.rounds.filter((r) => r.type === "groups"), prev = gRounds[gRounds.length - 1];
     let groups = [{ grp: "A", size: 3, adv: 2, srcs: null }, { grp: "B", size: 3, adv: 2, srcs: null }];
@@ -922,11 +929,11 @@ const H = {
   cmup(b) { const m = fmtEdit().customMatches, i = +b.dataset.i; if (i > 0) { [m[i - 1], m[i]] = [m[i], m[i - 1]]; redrawFmt(); } },
   cmdn(b) { const m = fmtEdit().customMatches, i = +b.dataset.i; if (i < m.length - 1) { [m[i], m[i + 1]] = [m[i + 1], m[i]]; redrawFmt(); } },
   cmdel(b) { fmtEdit().customMatches.splice(+b.dataset.i, 1); redrawFmt(); },
-  async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "Draw started"); await loadAll().catch(() => {}); formTab = ""; render(); },
-  async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "Dashboard on Auto"); await loadAll().catch(() => {}); formTab = ""; render(); },
-  async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "Dashboard mode changed"); await loadAll().catch(() => {}); formTab = ""; render(); },
-  async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "Bracket changed"); await loadAll().catch(() => {}); formTab = ""; render(); },
-  async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "Layout saved"); },
+  async drawstart() { await act(() => adm("a2_adm_event", { p: { tv_mode: "draw", draw_state: { start: Math.round(now()) + 2500 } } }), "เริ่มจับสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "จอ Dashboard กลับเป็นอัตโนมัติ"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "เปลี่ยนตารางสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  async laysave() { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), live: lay } } }), "บันทึกผังแล้ว"); },
   layreset() { lay = liveLayout(null); paintLay(); },
   layundo() { lay = liveLayout(event().dash_layout?.live); paintLay(); },
   async docadd() {
@@ -934,10 +941,10 @@ const H = {
     if (!f) return toast("เลือกไฟล์ก่อน", true);
     if (f.size > 10 * 1024 * 1024) return toast("ไฟล์ใหญ่เกิน 10 MB", true);
     const b = $("df"); b.disabled = true;
-    const ok = await act(async () => adm("a2_adm_doc_add", { p_title: title, p_file_name: f.name, p_mime: f.type || "application/octet-stream", p_data: await fileToB64(f) }), "Uploaded");
+    const ok = await act(async () => adm("a2_adm_doc_add", { p_title: title, p_file_name: f.name, p_mime: f.type || "application/octet-stream", p_data: await fileToB64(f) }), "อัปโหลดแล้ว");
     b.disabled = false; if (ok !== undefined) { $("dt").value = ""; b.value = ""; loadDocs(); }
   },
-  async savename() { const name = $("en").value.trim(); if (!name) return toast("ใส่ชื่องานก่อน", true); await act(() => adm("a2_adm_event", { p: { name } }), "Name saved"); },
+  async savename() { const name = $("en").value.trim(); if (!name) return toast("ใส่ชื่องานก่อน", true); await act(() => adm("a2_adm_event", { p: { name } }), "บันทึกชื่อแล้ว"); },
   async saveev() {
     const p = { setup_ms: Math.max(0, +$("es").value) * 1000, game_ms: Math.max(10, +$("eg").value) * 1000, countdown_ms: Math.max(0, Math.min(10, +$("ec").value)) * 1000 };
     await act(() => adm("a2_adm_event", { p }), "บันทึกแล้ว");
@@ -970,18 +977,18 @@ document.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); }
 document.addEventListener("click", async (e) => {
   const o = e.target.closest("[data-doc]"), d = e.target.closest("[data-docdel]");
   if (o) showDoc(+o.dataset.doc, { p_pw: pw }, o.dataset.t);
-  if (d && confirm(`ลบเอกสาร ${d.dataset.t}`)) { if ((await act(() => adm("a2_adm_doc_del", { p_id: +d.dataset.docdel }), "Deleted")) !== undefined) loadDocs(); }
+  if (d && confirm(`ลบเอกสาร ${d.dataset.t}`)) { if ((await act(() => adm("a2_adm_doc_del", { p_id: +d.dataset.docdel }), "ลบแล้ว")) !== undefined) loadDocs(); }
 });
 document.addEventListener("change", async (e) => {
   if (e.target.id === "lgf") { logF = e.target.value; redraw(); }
   if (e.target.id === "dref") {
     const on = e.target.checked;
-    if ((await act(() => adm("a2_adm_event", { p: { docs_ref: on } }), on ? "Referees can open documents" : "Documents hidden from referees")) === undefined) e.target.checked = !on;
+    if ((await act(() => adm("a2_adm_event", { p: { docs_ref: on } }), on ? "กรรมการเปิดดูเอกสารได้แล้ว" : "ซ่อนเอกสารจากกรรมการแล้ว")) === undefined) e.target.checked = !on;
   }
   if (e.target.id === "rm") {
     const on = e.target.checked, f = field(1), busy = f && f.match_code && ["setup", "ready", "countdown", "game", "stopped", "over"].includes(f.phase);
     if (busy && !confirm("มีเกมกำลังดำเนินอยู่ เปลี่ยนโหมดตอนนี้ กรรมการจะเห็นหน้าใหม่ทันที")) { e.target.checked = !on; return; }
-    if ((await act(() => adm("a2_adm_event", { p: { rules_mode: on } }), on ? "Rules mode on" : "Rules mode off")) === undefined) e.target.checked = !on; else { await loadAll().catch(() => {}); formTab = ""; render(); }
+    if ((await act(() => adm("a2_adm_event", { p: { rules_mode: on } }), on ? "เปิดโหมดกติกาแล้ว" : "ปิดโหมดกติกาแล้ว")) === undefined) e.target.checked = !on; else { await loadAll().catch(() => {}); formTab = ""; render(); }
   }
 });
 document.addEventListener("change", (e) => {
