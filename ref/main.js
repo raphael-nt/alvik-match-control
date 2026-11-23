@@ -26,7 +26,14 @@ async function flush() {
   try {
     while (Q.length) {
       const it = Q[0];
-      try { const r = await rpc(it.fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...it.args }); if (r && r.id) T.a2_game.set(r.id, r); }
+      try {
+        const r = await rpc(it.fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...it.args }); if (r && r.id) T.a2_game.set(r.id, r);
+        // The stored row reaches this phone a moment later by realtime. Keep the event here meanwhile,
+        // otherwise counts dip for a moment and a quick second tap on + misses the Knockout prompt
+        const a = it.args;
+        if (it.fn === "a2_ref_mark" && !T.a2_mark.has(a.p_id)) T.a2_mark.set(a.p_id, { id: a.p_id, game_id: a.p_game, kind: a.p_kind, side: a.p_side, t_ms: a.p_t_ms, source: "live", voided: false, created_at: new Date().toISOString() });
+        if (it.fn === "a2_ref_undo" && T.a2_mark.has(a.p_id)) T.a2_mark.set(a.p_id, { ...T.a2_mark.get(a.p_id), voided: true });
+      }
       catch (e) {
         if (/fetch|network|Failed/i.test(e.message || "") || !e.code) break;   // network down, retry next round
         toast(e.message, true);                                                  // server rejected, drop this item

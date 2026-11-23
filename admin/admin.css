@@ -164,3 +164,13 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .mode:hover:not(:disabled){border-left-color:var(--teal)}
 .mode.on{border-left-color:var(--done);cursor:default}
 .mode:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+/* Referee panel on the field tab : the same steps as the referee phone */
+.rp{display:grid;gap:10px;margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-left:6px solid var(--teal);border-radius:var(--r-md);background:var(--floor)}
+.rp>b{font-size:16px}.rp p{margin:0}
+.rpck{display:grid;gap:6px}
+.rpg{display:grid;grid-template-columns:1fr;gap:4px}
+.rpg>span{font-size:14px;color:var(--muted);margin-top:6px}
+.rpg .btns{margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.rpk{display:inline-flex;align-items:center;gap:8px;margin-right:14px}.rpk b{font-size:22px;min-width:18px;text-align:center}
+.rp .c-r{color:var(--red)}.rp .c-b{color:var(--blue)}
+
