@@ -192,3 +192,5 @@ body.cur,body.cur *{cursor:default}
 .rv-p{display:flex;gap:6px;font-size:24px;min-height:1.35em}
 .rv-r.live .rv-s,.rv-r.queued .rv-s{box-shadow:inset 0 0 0 3px var(--tape)}
 .sched .gp2{display:flex;gap:6px;font-size:22px;align-items:center}
+/* Event name sits on the same line as the iRAP wordmark at the bottom of the logo */
+.top img,.top h1,.top .rnd,.pop8 .h8 img,.pop8 .h8 span,.pop8 .h8 b{align-self:baseline}

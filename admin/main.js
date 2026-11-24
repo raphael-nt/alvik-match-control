@@ -34,6 +34,7 @@ function logout(expired) { pw = ""; authed = false; store("a2pw", null); if (exp
 
 // ---------- Sign in and first-time setup ----------
 async function drawLogin() {
+  pipUnmount();
   if (hasSetup === null) { try { hasSetup = await rpc("a2_has_setup"); } catch (e) { hasSetup = true; } }
   const first = !hasSetup;
   app.innerHTML = `<form class="login" id="lf"><img src="../shared/irap.png" alt="" style="height:44px;justify-self:start">
@@ -56,7 +57,7 @@ async function drawLogin() {
 async function start() {
   authed = true;
   if (!started) { started = true; connect(); onChange(render); raf(clocks); }
-  shell(); render();
+  shell(); pipMount(); render();
 }
 async function boot() {
   if (pw) { try { if (await rpc("a2_admin_login", { p_pw: pw })) return start(); } catch (e) {} pw = ""; store("a2pw", null); }
@@ -65,13 +66,83 @@ async function boot() {
 
 // ---------- Shell ----------
 function shell() {
-  app.innerHTML = `<div class="hdr"><div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="เต็มจอ" title="เต็มจอ">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">ออกจากระบบ</button></div>
+  app.innerHTML = `<div class="hdr"><div class="top"><img src="../shared/irap.png" alt=""><b id="evn"></b><span class="sp"></span>${netBadge()}<button class="btn small" id="pipb" title="หน้าต่างลอยดูหน้ากรรมการและ Dashboard" aria-pressed="false">จอย่อ</button>${fsSupported() ? `<button class="btn small fsb" id="fsb" aria-label="เต็มจอ" title="เต็มจอ">${FS_ICON}</button>` : ""}<button class="btn small" id="lo">ออกจากระบบ</button></div>
     <nav class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">${t}</button>`).join("")}</nav></div><div class="main" id="mn"></div>`;
   $("lo").onclick = () => logout(false);
   const fb = $("fsb"); if (fb) fb.onclick = () => toggleFs()?.catch?.(() => {});
+  $("pipb").onclick = pipToggle; pipBtn();
   app.querySelector(".tabs").onclick = (e) => { const b = e.target.closest("[data-tab]"); if (!b) return; tab = b.dataset.tab; lstore("a2tab", tab); app.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b)); lastKey = ""; formTab = ""; render(true); };
   paintNet();
 }
+
+// ---------- Preview windows : the referee screen and the Dashboard float over every tab ----------
+// They sit outside #app, so switching tabs or redrawing never reloads them. The referee window uses watch mode
+// (never signs in, never takes the referee role). Each window is anchored by its distance from the right and bottom
+// edges; width, place and minimized state are kept on this computer
+const PIP = [
+  { k: "ref", title: "หน้ากรรมการ", src: "../ref/?watch=1", open: "../ref/?watch=1", vw: 390, vh: 760, w: 230, min: 150, max: 585 },
+  { k: "dash", title: "Dashboard", src: "../dashboard/?embed=1", open: "../dashboard/", vw: 1280, vh: 720, w: 400, min: 240, max: 1280 },
+];
+const PIP_HEAD = 34, PIP_GAP = 12;
+const PIP_SVG = { open: `<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>`, min: `<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>`, max: `<svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/></svg>`, grip: `<svg viewBox="0 0 24 24"><path d="M5 13V5h8M5 5l7 7"/></svg>` };
+let pipSt = (() => { try { return JSON.parse(lstore("a2pip") || "null"); } catch (e) { return null; } })() || { on: innerWidth >= 900 };
+const pipSave = () => lstore("a2pip", JSON.stringify(pipSt));
+const pipH = (p, w) => Math.round((w * p.vh) / p.vw);
+function pipBtn() { const b = $("pipb"); if (b) { b.classList.toggle("on", !!pipSt.on); b.setAttribute("aria-pressed", pipSt.on ? "true" : "false"); } }
+function pipToggle() { pipSt.on = !pipSt.on; pipSave(); if (pipSt.on) pipMount(); else pipUnmount(); pipBtn(); }
+function pipUnmount() { document.querySelectorAll(".pw").forEach((x) => x.remove()); }
+function pipFront(el) { document.querySelectorAll(".pw").forEach((x) => x.classList.toggle("front", x === el)); }
+// Size the window from its width, then keep it inside the browser window
+function pipPlace(el) {
+  const p = PIP.find((x) => x.k === el.dataset.k), st = pipSt[p.k];
+  st.w = Math.round(Math.max(p.min, Math.min(p.max, innerWidth - 8, st.w)));
+  const h = pipH(p, st.w), full = st.min ? PIP_HEAD : PIP_HEAD + h;
+  st.r = Math.round(Math.max(0, Math.min(innerWidth - st.w, st.r))); st.b = Math.round(Math.max(0, Math.min(innerHeight - full, st.b)));
+  Object.assign(el.style, { width: st.w + "px", right: st.r + "px", bottom: st.b + "px" });
+  const body = el.querySelector(".pwb"), fr = el.querySelector("iframe");
+  body.style.height = h + "px";
+  Object.assign(fr.style, { width: p.vw + "px", height: p.vh + "px", transform: `scale(${st.w / p.vw})` });
+  el.classList.toggle("min", !!st.min);
+  const mb = el.querySelector('[data-pw="min"]'); mb.innerHTML = st.min ? PIP_SVG.max : PIP_SVG.min;
+  mb.title = st.min ? "ขยาย" : "ย่อ"; mb.setAttribute("aria-label", `${mb.title}${p.title}`);
+}
+function pipMount() {
+  pipUnmount(); if (!pipSt.on) return;
+  let right = 16;
+  for (const p of PIP) {
+    // First time : the referee window at the bottom right corner, the Dashboard to its left
+    const st = (pipSt[p.k] ||= {}); st.w ??= p.w; st.r ??= right; st.b ??= 16; right = st.r + st.w + PIP_GAP;
+    const el = document.createElement("section");
+    el.className = "pw"; el.dataset.k = p.k; el.setAttribute("aria-label", p.title);
+    el.innerHTML = `<header class="pwh"><span class="pwi pwg" title="ลากเพื่อปรับขนาด" aria-hidden="true">${PIP_SVG.grip}</span><b>${p.title}</b><span class="sp"></span>
+      <a class="pwi" href="${p.open}" target="_blank" rel="noopener" title="เปิดในแท็บใหม่" aria-label="เปิด${p.title}ในแท็บใหม่">${PIP_SVG.open}</a><button type="button" class="pwi" data-pw="min"></button></header>
+      <div class="pwb"><iframe src="${p.src}" title="${p.title}" tabindex="-1"></iframe></div>`;
+    document.body.appendChild(el);
+    pipPlace(el); pipDrag(el, p);
+  }
+  pipSave();
+}
+// Drag the title bar to move, drag the corner grip to resize (the window grows up and to the left), double click to minimize
+function pipDrag(el, p) {
+  const st = pipSt[p.k], hd = el.querySelector(".pwh");
+  el.addEventListener("pointerdown", () => pipFront(el));
+  el.querySelector('[data-pw="min"]').onclick = () => { st.min = !st.min; pipPlace(el); pipSave(); };
+  hd.addEventListener("dblclick", (e) => { if (e.target.closest(".pwi")) return; st.min = !st.min; pipPlace(el); pipSave(); });
+  hd.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || (e.target.closest(".pwi") && !e.target.closest(".pwg"))) return;
+    const grip = !!e.target.closest(".pwg") && !st.min, x0 = e.clientX, y0 = e.clientY, r0 = st.r, b0 = st.b, w0 = st.w;
+    e.preventDefault(); hd.setPointerCapture(e.pointerId); el.classList.add("drag");
+    const mv = (ev) => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (grip) st.w = w0 - Math.max(dx, (dy * p.vw) / p.vh);
+      else { st.r = r0 - dx; st.b = b0 - dy; }
+      pipPlace(el);
+    };
+    const up = () => { hd.removeEventListener("pointermove", mv); hd.removeEventListener("pointerup", up); hd.removeEventListener("pointercancel", up); el.classList.remove("drag"); pipSave(); };
+    hd.addEventListener("pointermove", mv); hd.addEventListener("pointerup", up); hd.addEventListener("pointercancel", up);
+  });
+}
+addEventListener("resize", () => document.querySelectorAll(".pw").forEach(pipPlace));
 
 // ---------- Advanced sections ----------
 // Rarely used options sit in a collapsed section; which ones are open is kept while the tab redraws

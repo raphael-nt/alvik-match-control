@@ -1,15 +1,19 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
-import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep, netBadge, raf, now } from "../shared/common.js";
+import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep as beepOn, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets, roundTableHtml } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 // Fullscreen button shows only where the browser supports it (not on iPhone Safari)
-const fsOk = fsSupported();
+// Watch mode (ref/?watch=1) : the preview window in Admin. Shows what the referee sees for the match on the field,
+// never signs in, never takes the referee role, sends nothing and plays no sound
+const WATCH = new URLSearchParams(location.search).has("watch");
+const fsOk = fsSupported() && !WATCH;
+const beep = WATCH ? () => {} : beepOn;
 
 useMarks();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)));
 const L = (k, v) => { try { return v === undefined ? localStorage.getItem(k) : v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { return null; } };
-let device = L("a2dev"); if (!device) { device = uid(); L("a2dev", device); }
-let pin = L("a2pin") || "";
+let device = WATCH ? "" : L("a2dev"); if (!WATCH && !device) { device = uid(); L("a2dev", device); }
+let pin = WATCH ? "" : L("a2pin") || "";
 let ctl = null;            // { control, session }
 let wake = null;
 let reviewOk = { held: false, seen: false };
@@ -18,8 +22,8 @@ const app = $("app");
 const vib = () => { try { navigator.vibrate && navigator.vibrate(18); } catch (e) {} };
 
 // ---------- Offline queue (design 7.6) ----------
-let Q = []; try { Q = JSON.parse(L("a2q") || "[]"); } catch (e) { Q = []; }
-const saveQ = () => L("a2q", JSON.stringify(Q));
+let Q = []; try { Q = WATCH ? [] : JSON.parse(L("a2q") || "[]"); } catch (e) { Q = []; }
+const saveQ = () => { if (!WATCH) L("a2q", JSON.stringify(Q)); };
 let flushing = false;
 async function flush() {
   if (flushing || !Q.length) return; flushing = true;
@@ -87,7 +91,7 @@ async function claim() {
 async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => (wake = null)); } } catch (e) {} }
 
 // ---------- Components ----------
-const bar = (m, g) => `<div class="bar"><b>Referee</b>${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${fsOk ? `<button class="ib" data-fs aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>` : ""}${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
+const bar = (m, g) => `<div class="bar"><b>Referee</b>${WATCH ? `<span class="wtag">Preview</span>` : ""}${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${fsOk ? `<button class="ib" data-fs aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>` : ""}${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
 const teams = (m) => `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, "red"))}</b><em>${m.red_wins}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, "blue"))}</b><em>${m.blue_wins}</em></div></div>`;
 const clockBox = () => `<button type="button" class="clock tap" id="clock" data-stop><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></button>`;
 const sideBtns = (key, both) => `<div class="pair"><button class="btn red big" data-mk="${key}" data-s="red">RED</button><button class="btn blue big" data-mk="${key}" data-s="blue">BLUE</button></div>${both ? `<button class="btn same" data-mk="${key}" data-s="both">Same time</button>` : ""}`;
@@ -108,8 +112,8 @@ function waitingView() {
     ${finished ? `<div class="banner done"><h3>Match finished</h3><div>${esc(finished.code)} ผู้ชนะ ${esc(finished.winner)}</div></div>` : ""}
     <h2>Waiting for next match</h2><p class="muted">แอดมินเรียกคู่ขึ้นสนามแล้ว หน้านี้จะเปลี่ยนเอง</p>
     ${nx ? `<div class="card"><div class="muted">Up next</div><h3>${esc(nx.code)}</h3><div>${esc(sideName(nx, "red"))} vs ${esc(sideName(nx, "blue"))}</div>${nx.sched_at ? `<div class="muted">${fmtTime(nx.sched_at)}</div>` : ""}</div>` : ""}
-    <button class="btn" id="out">Sign out</button></div>`;
-  $("out").onclick = () => { rpc("a2_ref_release", { p_pin: pin, p_device: device }).catch(() => {}); pin = ""; L("a2pin", null); ctl = null; render(true); };
+    ${WATCH ? "" : `<button class="btn" id="out">Sign out</button>`}</div>`;
+  const out = $("out"); if (out) out.onclick = () => { rpc("a2_ref_release", { p_pin: pin, p_device: device }).catch(() => {}); pin = ""; L("a2pin", null); ctl = null; render(true); };
 }
 function viewOnly(m) {
   app.innerHTML = `${bar(m)}<div class="wrap center"><h2>View only</h2><p>มีเครื่องกรรมการอื่นใช้อยู่ ถ้าเครื่องนั้นเสีย ให้แอดมินกด "Transfer referee" แล้วหน้านี้จะรับสิทธิ์เอง</p>${teams(m)}${clockBox()}</div>`;
@@ -285,6 +289,7 @@ function render(force) {
   if (!force && k === key) { paintNet(); return; }
   key = k;
   if (!S.ready) app.innerHTML = `<div class="login"><p class="muted">Loading</p>${netBadge()}</div>`;
+  else if (WATCH) { if (!m || m.status === "done" || !g) waitingView(); else if (event().rules_mode === false) simpleView(m, g); else matchView(f, m, g); }
   else if (!pin) loginView();
   else if (!m || m.status === "done" || !g) { if (ctl && f && ctl.session !== f.session && f.session) claim(); waitingView(); }
   else if (!ctl || (ctl.control && ctl.session !== f.session)) { claim(); viewOnly(m); }
@@ -294,6 +299,7 @@ function render(force) {
   paintNet();
 }
 onChange(() => render());
+if (WATCH) { document.body.classList.add("watch"); app.inert = true; }
 connect();
 raf(tickClock);
 setInterval(() => { if (pin && S.ready) rpc("a2_ref_heartbeat", { p_pin: pin, p_device: device }).then((ok) => { if (!ok || (ctl && !ctl.control)) claim(); }).catch(() => {}); }, 10000);

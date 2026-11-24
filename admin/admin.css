@@ -174,3 +174,21 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .rpk{display:inline-flex;align-items:center;gap:8px;margin-right:14px}.rpk b{font-size:22px;min-width:18px;text-align:center}
 .rp .c-r{color:var(--red)}.rp .c-b{color:var(--blue)}
 
+/* Preview windows : the referee screen and the Dashboard float over every tab */
+.pw{position:fixed;z-index:60;background:var(--ink);border-radius:10px;box-shadow:0 8px 28px #0006;overflow:hidden;display:flex;flex-direction:column}
+.pw.front{z-index:61}
+.pwh{display:flex;align-items:center;gap:4px;height:34px;padding:0 4px;color:#fff;cursor:move;user-select:none;touch-action:none;font-size:14px;flex:none}
+.pwh b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.pwh .sp{flex:1}
+.pwi{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#fff;cursor:pointer;flex:none;padding:0}
+.pwi:hover{background:#ffffff26}.pwi:focus-visible{outline:2px solid var(--tape)}
+.pwi svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pwg{cursor:nwse-resize;opacity:.7}
+.pwb{position:relative;overflow:hidden;background:#fff;flex:none}
+.pwb iframe{position:absolute;left:0;top:0;border:0;transform-origin:0 0;pointer-events:none}
+.pw.min .pwb{display:none}.pw.min .pwg{visibility:hidden;width:4px}
+.pw.drag{box-shadow:0 12px 36px #0008}
+.top #pipb.on{background:#ffffff2e;border-color:#fff}
+/* Event name sits on the same line as the iRAP wordmark at the bottom of the logo */
+.top img,.top #evn{align-self:baseline}
+/* Phones : no room for preview windows, open the pages in their own tabs instead */
+@media (max-width:700px){.top #pipb,.pw{display:none}}

@@ -11,6 +11,8 @@ addEventListener("resize", fit); fit();
 let sound = false;
 $("fs").onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; beep(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
 const snd = (f, ms) => sound && beep(f, ms);
+// Embedded in the Admin preview window (dashboard/?embed=1) : no fullscreen prompt, stays silent
+if (new URLSearchParams(location.search).has("embed")) $("fs").remove();
 
 // Header on every screen; an announcement from Admin shows as a bar over the top of the screen
 const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}${fsSupported() ? `<button class="fsh" data-fsh aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
