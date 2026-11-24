@@ -2,7 +2,7 @@ import { setLang } from "../shared/lang.js";
 import { bracketHtml, fitBrackets, roundTableHtml, roundTitle } from "../shared/bracket.js";
 import { listDocs, showDoc, fileToB64, docRows } from "../shared/docs.js";
 import { BOS, STAGE_CHOICES, build as buildFormat, buildGroupMatches, defaultKoRound, defaults as fmtDefaults, materializeCustom, normalize as fmtNormalize, parseSrcKey, qualifiers, reletter, resolveRoundGroupSlots, roundQualifiers, srcKey, stageLabel, validate as validateFormat } from "../shared/format.js";
-import { roundList, hasGrpLabel, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode } from "../shared/common.js";
+import { roundList, hasGrpLabel, useMarks, marksOf, clockV3, fmtMs1, PHASE_EN, decideV3, RULE_EN, RULE_TH, field, connect, fsSupported, toggleFs, FS_ICON, onChange, event, matches, groups, loadAll, match, gamesOf, openGame, gameNo, sideName, teamName, teamsArr, tableOf, srcLabel, grpName, fmtMs, parseMs, fmtTime, esc, $, now, rpc, toast, netBadge, raf, paintNet, S, T, STATUS_TH, METHOD_TH, previewDecide, REASON_TH, sb, BK_MODES, bracketSetting, bracketMode, customMatch } from "../shared/common.js";
 
 // Admin is in Thai; the Dashboard keeps English for the TV
 setLang("th");
@@ -167,17 +167,17 @@ function render(force) {
   if (FORM_TABS.includes(tab)) { if (formTab !== tab || force === "again") { formTab = tab; $("mn").innerHTML = VIEW[tab](); afterForm(); } updateDlgBanner(); return; }
   const k = tab + JSON.stringify([ev, [...T.a2_team.values()].map((t) => [t.name, t.absent]), matches().map((m) => [m.code, m.status, m.red_wins, m.blue_wins, m.red_seed, m.blue_seed, m.field_no, m.sched_at, m.auto_open, m.walkover, m.forfeit, m.absent_req, m.bo, m.order_no]), fields().map((f) => [f.no, f.match_code, f.phase, f.checks, f.stop_ms, f.ref_seen && Math.floor(Date.parse(f.ref_seen) / 10000)]), [...T.a2_game.values()].map((g) => [g.id, g.version]), T.a2_mark.size, S.standings, [...T.a2_tiebreak.values()], 0]);
   if (k === lastKey) { updateDlgBanner(); return; }
-  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "field") mountTools(); updateDlgBanner();
+  lastKey = k; $("mn").innerHTML = VIEW[tab](); fitBrackets($("mn")); if (tab === "field") { mountTools(); mountCustom(); } updateDlgBanner();
 }
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
 // ---------- Field tab helpers ----------
 // Queue day : practice day (P matches), competition day, or every match. Kept on this computer; until chosen
 // it follows the bracket setting (practice until the practice matches are over or a real match has started)
-const QDAYS = [["practice", "วันซ้อม"], ["comp", "วันแข่ง"], ["all", "ทั้งหมด"]];
+const QDAYS = [["practice", "วันซ้อม"], ["comp", "วันแข่ง"], ["all", "ทั้งหมด"], ["custom", "Custom"]];
 const qDay = () => { const v = lstore("a2qday"); return QDAYS.some(([k]) => k === v) ? v : bracketMode(); };
-const inDay = (m, d = qDay()) => d === "all" || (m.stage === "practice") === (d === "practice");
-const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no == null && inDay(m)).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
+const inDay = (m, d = qDay()) => d === "custom" ? m.stage === "custom" : d === "all" || (m.stage === "practice") === (d === "practice");
+const upNext = () => qDay() === "custom" ? [customMatch()].filter((x) => x && x.status === "ready" && x.field_no == null) : matches().filter((m) => m.status === "ready" && m.field_no == null && inDay(m)).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
 // ---------- Things waiting for the admin, shown on top of the field tab ----------
 function alertsHtml() {
@@ -211,6 +211,31 @@ function toolsHtml() {
       <div class="row"><select id="wdteam">${t.map((x) => `<option value="${x.seed}">${esc(teamName(x.seed))}${x.absent ? " (ถอนตัวอยู่)" : ""} เหลือ ${left(x.seed)} คู่</option>`).join("")}</select>
       <button class="btn danger" data-act="withdraw">ถอนตัว</button><button class="btn" data-act="comeback">กลับมาแข่ง</button></div></div>`)}</div>`;
 }
+// Custom match card (queue day Custom) : names and Bo typed by Admin. One DOM node, so typing survives live redraws
+let customEl = null;
+function customStatus() {
+  const X = customMatch(), f = field(1);
+  if (!X) return `<p class="muted">ยังไม่มีคู่ Custom พิมพ์ชื่อแล้วกดบันทึก</p>`;
+  return `<p><b>X</b> ${esc(sideName(X, "red"))} พบ ${esc(sideName(X, "blue"))} Bo${X.bo} <span class="pill ${X.status}">${ST_EN[X.status]}</span> ${X.red_wins}-${X.blue_wins}${f && f.match_code === "X" ? " อยู่บนสนาม" : ""}</p>`;
+}
+function customHtml() {
+  const X = customMatch(), bo = X ? X.bo : 1;
+  return `<div class="card cx"><div class="tl"><b>คู่ Custom</b><span class="muted">พิมพ์ชื่อสองฝั่ง แล้วกดเรียกขึ้นสนาม กรรมการเล่นได้เหมือนคู่ปกติ ผลไม่นับในตารางคะแนน สาย หรืออันดับ จอ Dashboard โหมดอัตโนมัติจะขึ้นจอ Custom เอง</span></div>
+    <div class="cxf"><label>ทีมแดง<input id="cxr" maxlength="40" value="${esc(X ? teamName(901) : "")}"></label><label>ทีมน้ำเงิน<input id="cxb" maxlength="40" value="${esc(X ? teamName(902) : "")}"></label>
+    <label>Bo<select id="cxbo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label></div>
+    <div id="cxst"></div>
+    <div class="btns"><button class="btn" data-act="cxsave">บันทึกชื่อ</button><button class="btn primary" data-act="cxcall">บันทึกและเรียกขึ้นสนาม</button><button class="btn" data-act="cxnew">เริ่มคู่ใหม่ (ล้างผลเดิม)</button></div></div>`;
+}
+function mountCustom() {
+  const host = $("qcustom"); if (!host) return;
+  if (!customEl) { customEl = document.createElement("div"); customEl.innerHTML = customHtml(); }
+  host.replaceWith(customEl);
+  const st = customEl.querySelector("#cxst"); if (st) st.innerHTML = customStatus();
+}
+const cxSend = async (fresh) => {
+  const r = await act(() => adm("a2_adm_custom", { p_red: $("cxr").value, p_blue: $("cxb").value, p_bo: +$("cxbo").value, p_new: fresh }), fresh ? "เริ่มคู่ Custom ใหม่แล้ว" : "บันทึกคู่ Custom แล้ว");
+  await loadAll().catch(() => {}); redraw(); return r !== undefined;
+};
 function mountTools() {
   const host = $("qtools"); if (!host) return;
   if (!toolsEl) { toolsEl = document.createElement("div"); toolsEl.innerHTML = toolsHtml(); }
@@ -258,7 +283,7 @@ function refPanel(f, m, g) {
   return `<div class="rp"><b>${ph === "stopped" ? "เวลาหยุดที่ " + fmtMs1(f.stop_ms) : "หมดเวลา"} ตรวจผลแล้วกดรับรอง</b>${rows}
     ${g.complete_side ? `<p>Knockout ${res(first("complete") || { side: g.complete_side, t_ms: g.complete_ms })}</p>` : ""}
     <p>ผล : ${out}</p>
-    <div class="btns">${g.need === "judge" ? b("judge", "แดงชนะ", "red", 'data-s="red"') + b("judge", "น้ำเงินชนะ", "blue", 'data-s="blue"') : b("confirm", "รับรองผล", "primary")}${b("undo", "ย้อนกลับ", "", "", !undoable.length)}</div></div>`;
+    <div class="btns">${g.need === "judge" ? b("judge", "แดงชนะ", "red", 'data-s="red"') + b("judge", "น้ำเงินชนะ", "blue", 'data-s="blue"') : b("confirm", "รับรองผล", "primary")}${b("undo", "ย้อนกลับ", "", "", !undoable.length)}${g.complete_side && f.phase === "stopped" ? b("ko_undo", "ย้อน Knockout เวลาเดินต่อ", "danger") : ""}</div></div>`;
 }
 // Calls run one after another in the order pressed, so quick taps (three checklist ticks) are all sent
 let arChain = Promise.resolve();
@@ -291,6 +316,7 @@ document.addEventListener("click", async (e) => {
   }
   if (fn === "ko") { if (!confirm(`Knockout ${SIDE_TH[sd]} (Mission complete) หยุดเวลาทันที`)) return; return arCall("mark", { game: g.id, kind: "complete", side: sd, t_ms: el }); }
   if (fn === "undo") { const last = marksOf(g.id).filter((x) => !x.voided && !["complete", "false_start"].includes(x.kind)).pop(); if (last) return arCall("undo", { id: last.id }); return; }
+  if (fn === "ko_undo") { if (!confirm("ย้อน Knockout : ลบ Knockout ของเกมนี้ แล้วเวลาเดินต่อจากตอนที่หยุด")) return; return arCall("ko_undo", { game: g.id }); }
   if (fn === "confirm") { const r = await arCall("confirm", { game: g.id }); if (r !== undefined) toast(r === "replay" ? "เสมอ แข่งใหม่แบบสนามเดิม" : r === "judge" ? "ต้องเลือกผู้ชนะ (FAQ 35)" : (SIDE_TH[r] || r) + "ชนะเกมนี้"); return; }
   if (fn === "judge") return arCall("judge", { game: g.id, side: sd });
   if (fn === "simple") { if (!confirm(`${SIDE_TH[sd]}ชนะเกมนี้`)) return; await act(() => adm("a2_adm_game", { p_game: g.id, p: { pattern: g.pattern, winner: sd }, p_version: g.version })); await loadAll().catch(() => {}); }
@@ -311,10 +337,10 @@ function fieldView() {
       <div class="btns"><button class="btn" data-act="edit" data-c="${m.code}">ดูหรือแก้เหตุการณ์</button><button class="btn" data-act="transfer">ย้ายเครื่องกรรมการ</button><button class="btn danger" data-act="close" data-c="${m.code}">เอาลงจากสนาม</button></div></div>`;
   }
   const day = qDay(), dayMs = matches().filter((x) => inDay(x, day));
-  const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}">${t} <span>${matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>`;
+  const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}">${t} <span>${k === "custom" ? (customMatch() ? 1 : 0) : matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>`;
   const rows = dayMs.map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
-  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div></div></div>`;
+  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}${day === "custom" ? `<div id="qcustom"></div>` : `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div>`}</div></div>`;
 }
 
 // ---------- Schedule tab ----------
@@ -862,7 +888,7 @@ document.addEventListener("click", (e) => {
 // ---------- Dashboard tab ----------
 function tvView() {
   const ev = event(), cur = ev.tv_mode || "auto";
-  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"], ["custom", "Custom", "นาฬิกาใหญ่กับชื่อสองทีมของคู่ Custom"]];
   const rnd = ev.dash_layout?.rnd || "auto", bkh = new Set(ev.dash_layout?.bkh || []);
   return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
    <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>
@@ -1146,6 +1172,16 @@ const H = {
   async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   // The boxes on screen are the truth : save every unticked round, no redraw, untick again if saving fails
   qday(b) { lstore("a2qday", b.dataset.m); redraw(); },
+  async cxsave() { await cxSend(false); },
+  async cxnew() { if (!confirm("เริ่มคู่ Custom ใหม่ ผลเดิมของคู่นี้จะหายไป")) return; await cxSend(true); },
+  async cxcall() {
+    if (!(await cxSend(false))) return;
+    const f = field(1), on = f && f.match_code ? match(f.match_code) : null, X = customMatch();
+    if (on && on.code !== "X" && on.status !== "done") { toast(`คู่ ${on.code} ยังอยู่บนสนาม เอาลงก่อน`, true); return; }
+    if (X && X.status === "done") { toast("คู่ Custom จบแล้ว กดเริ่มคู่ใหม่ก่อน", true); return; }
+    if (f && f.match_code === "X") { toast("คู่ Custom อยู่บนสนามแล้ว"); return; }
+    await act(() => adm("a2_adm_call", { p_code: "X" }), "เรียกคู่ Custom ขึ้นสนามแล้ว"); await loadAll().catch(() => {}); redraw();
+  },
   async bkr(b) {
     const bkh = [...document.querySelectorAll('[data-act="bkr"]')].filter((x) => !x.checked).map((x) => x.dataset.m);
     try { await adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bkh } } }); toast("เปลี่ยนรอบในตารางสายแล้ว"); }

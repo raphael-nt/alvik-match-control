@@ -199,3 +199,8 @@ body.cur,body.cur *{cursor:default}
 .sched .gp2{display:flex;gap:6px;font-size:22px;align-items:center}
 /* Event name sits on the same line as the iRAP wordmark at the bottom of the logo */
 .top img,.top h1,.top .rnd,.pop8 .h8 img,.pop8 .h8 span,.pop8 .h8 b{align-self:baseline}
+/* Custom screen : two names and the big clock */
+.cu{position:absolute;left:40px;right:40px;top:120px;bottom:40px;display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:28px;align-items:stretch}
+.cu .lt{align-content:center;justify-items:center;text-align:center}.cu .lt .n{font-size:88px;font-weight:800}
+.cu .lc{display:flex;flex-direction:column;justify-content:center}
+.cu .lc .sc{font-size:90px;font-weight:800;margin-top:20px}.cu .lc .sc .c-r{color:#ff7a6e}.cu .lc .sc .c-b{color:#7ea2ff}

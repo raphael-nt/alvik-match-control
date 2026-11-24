@@ -79,7 +79,7 @@ function undo(g) {
 }
 // Clock and flow actions re-read the data right away: realtime updates can arrive seconds late,
 // and a stale screen makes the referee tap twice
-const FLOW = new Set(["a2_ref_stop", "a2_ref_clock", "a2_ref_setup", "a2_ref_go", "a2_ref_false_start", "a2_ref_confirm", "a2_ref_judge", "a2_ref_pattern", "a2_ref_check"]);
+const FLOW = new Set(["a2_ref_ko_undo", "a2_ref_stop", "a2_ref_clock", "a2_ref_setup", "a2_ref_go", "a2_ref_false_start", "a2_ref_confirm", "a2_ref_judge", "a2_ref_pattern", "a2_ref_check"]);
 async function call(fn, args) { try { const r = await rpc(fn, { p_pin: pin, p_device: device, p_session: ctl?.session, ...args }); vib(); if (FLOW.has(fn)) loadAll().catch(() => {}); return r; } catch (e) { if (e.code === "forbidden") { ctl = null; claim(); } toast(e.message || "ส่งไม่สำเร็จ", true); throw e; } }
 
 // ---------- Referee device claim ----------
@@ -201,6 +201,8 @@ function reviewBody(f, m, g) {
     const ok = !Q.length;
     const label = p.side ? "Confirm result" : p.need === "replay" ? `Replay with pattern ${g.pattern}` : "Referee decides";
     act = `<button class="btn primary huge" id="confirm" ${ok ? "" : "disabled"}>${label}</button>${Q.length ? `<p class="muted center">รอส่งข้อมูลให้ครบก่อน</p>` : ""}`;
+    // Knockout pressed by mistake : take it back and the clock runs on from where it stopped
+    if (s.complete && !s.complete.pending && stopped) act += `<button class="btn danger" id="koundo">Undo Knockout, clock runs on</button>`;
   }
   return `<div class="clock"><div class="t">${stopped ? fmtMs1(f.stop_ms) : "1:30.0"}</div><div class="l">${stopped ? "Stopped at (from GO)" : "Time up"}</div></div>
     <section class="sum">
@@ -237,6 +239,10 @@ function bindMatch(f, m, g) {
     else { Q = Q.filter((i) => !(i.fn === "a2_ref_mark" && i.args.p_game === g.id)); saveQ(); call("a2_ref_false_start", {}).then(() => beep(300, 500)).catch(() => {}); }
   }));
   const u = $("undo"); if (u) u.onclick = () => undo(g);
+  const ku = $("koundo"); if (ku) ku.onclick = async () => {
+    if (!(await ask("Undo Knockout", "ลบ Knockout ของเกมนี้ แล้วเวลาเดินต่อจากตอนที่หยุด", "Undo Knockout"))) return;
+    call("a2_ref_ko_undo", { p_game: g.id }).then((r) => { if (r && r.id) T.a2_game.set(r.id, r); render(true); }).catch(() => {});
+  };
   const c = $("confirm"); if (c) c.onclick = () => { c.disabled = true; call("a2_ref_confirm", { p_game: g.id }).then((r) => { reviewOk = { held: false, seen: false }; toast(r === "replay" ? "เสมอ แข่งใหม่แบบสนามเดิม" : r === "judge" ? "กรรมการต้องตัดสิน" : r.toUpperCase() + " wins"); afterGame(m.code); }).catch(() => {}); };
   app.querySelectorAll("[data-judge]").forEach((b) => (b.onclick = () => call("a2_ref_judge", { p_game: g.id, p_side: b.dataset.judge }).then(() => { reviewOk = { held: false, seen: false }; afterGame(m.code); }).catch(() => {})));
 }

@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent } from "../shared/common.js";
+import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent, customMatch } from "../shared/common.js";
 import { bracketHtml, fitBrackets, gamePills, roundTitle } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -28,7 +28,9 @@ function mode() {
   if (md && md !== "auto") return { fields: "live", groups: "standings" }[md] || md;
   const F = finalMatch();
   if ((F && F.status === "done") || (!F && allMatchesDone() && S.ranking.some((r) => r.pos === 1))) return "champion";
-  return onField() ? "live" : "bracket";
+  const o = onField();
+  if (o && o.m.stage === "custom") return "custom";   // the custom match on the field gets its own clock screen
+  return o ? "live" : "bracket";
 }
 
 // ---------- Live ----------
@@ -45,6 +47,14 @@ function liveView() {
     upnext: upNextHtml(),
   };
   return `${head()}${Object.entries(L).filter(([k, p]) => p.on && body[k]).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
+}
+// Custom screen : the two names typed in Admin and the big clock, nothing else
+function customView() {
+  const X = customMatch(), nm = (s) => (X ? esc(sideName(X, s)) : s === "red" ? "Red" : "Blue");
+  const sc = X && X.bo > 1 ? `<div class="sc"><span class="c-r">${X.red_wins}</span> - <span class="c-b">${X.blue_wins}</span></div>` : "";
+  return `${head()}<div class="cu"><div class="lt side-r"><div class="n">${nm("red")}</div></div>
+    <div class="lc"><div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>${sc}</div>
+    <div class="lt side-b"><div class="n">${nm("blue")}</div></div></div><div id="cd"></div><div id="bn"></div>`;
 }
 // Bracket fills the height; Up next sits in a narrow column on the right
 function bracketView() { return `${head()}<div class="bkfull"><div class="bkarea">${bracketHtml({ dark: true, maxh: 940, hide: bkHide() })}</div>${upNextHtml()}</div>`; }
@@ -149,10 +159,10 @@ let key = "", cur = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
-  const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed])]) + (md === "draw" && !event().draw_state?.live ? Math.floor(Date.now() / 800) : "");
+  const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed]), customMatch() && [teamName(901), teamName(902), customMatch().bo]]) + (md === "draw" && !event().draw_state?.live ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;
-  stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "rounds" ? roundsView() : md === "champion" ? champView() : bracketView();
+  stage.innerHTML = md === "live" ? liveView() : md === "standings" ? standingsView() : md === "schedule" ? scheduleView() : md === "draw" ? drawView() : md === "rounds" ? roundsView() : md === "champion" ? champView() : md === "custom" ? customView() : bracketView();
   fitBrackets(stage); paintNet();
 }
 onChange(render); connect();
@@ -184,8 +194,9 @@ raf(() => {
   if (sound && (ck.phase === "over" || ck.phase === "stopped") && lp === "game") endSound();
   lp = ck.phase; ls = sec;
   // Knockout : Mission complete stops the clock, show it once per game
-  if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id) {
-    koShown = g.id;
+  // Once per Knockout : an undone Knockout followed by a new one shows again
+  if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id + ":" + g.complete_ms) {
+    koShown = g.id + ":" + g.complete_ms;
     if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: sd, label: "Knockout", name: sd === "both" ? `${sideName(m, "red")} + ${sideName(m, "blue")}` : sideName(m, sd), detail: `Mission complete at ${fmtMs1(f.stop_ms)}, rule 6.1`, meta: `Match ${m.code} · Game ${gameNo(m.code, g)}` }); }
   }
   if (m) {

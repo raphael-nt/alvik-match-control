@@ -31,14 +31,17 @@ export const event = () => T.a2_event.get(1) || { name: "", setup_ms: 60000, gam
 export const teamsArr = () => {
   if (_cTeams && _tSize === T.a2_team.size) return _cTeams;
   _tSize = T.a2_team.size;
-  return (_cTeams = [...T.a2_team.values()].sort((a, b) => a.seed - b.seed));
+  // Seeds 901 and 902 hold the custom match names (migration 024), not event teams
+  return (_cTeams = [...T.a2_team.values()].filter((t) => t.seed <= 64).sort((a, b) => a.seed - b.seed));
 };
 export const matches = () => {
   if (_cMatches && _mSize === T.a2_match.size) return _cMatches;
   _mSize = T.a2_match.size;
-  return (_cMatches = [...T.a2_match.values()].sort((a, b) => a.order_no - b.order_no));
+  // The custom match (code X) stays out of the queue, schedule, bracket and rounds; read it with customMatch()
+  return (_cMatches = [...T.a2_match.values()].filter((m) => m.stage !== "custom").sort((a, b) => a.order_no - b.order_no));
 };
 export const match = (c) => T.a2_match.get(c);
+export const customMatch = () => T.a2_match.get("X");
 export const fields = () => {
   const cnt = event().field_count;
   if (_cFields && _fSize === T.a2_field.size && _fCnt === cnt) return _cFields;

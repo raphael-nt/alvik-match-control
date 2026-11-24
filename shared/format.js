@@ -6,7 +6,7 @@ import { th } from "./lang.js";
 
 export const STAGE_EN = {
   r1: "Group stage", r2: "Round 2", r64: "Round of 64", r32: "Round of 32",
-  r16: "Round of 16", qf: "Quarterfinal", sf: "Semifinal", third: "3rd place", final: "Final", practice: "Practice",
+  r16: "Round of 16", qf: "Quarterfinal", sf: "Semifinal", third: "3rd place", final: "Final", practice: "Practice", custom: "Custom",
 };
 const KO = { 2: ["final", "F"], 4: ["sf", "SF"], 8: ["qf", "QF"], 16: ["r16", "R16-"], 32: ["r32", "R32-"], 64: ["r64", "R64-"] };
 export const KO_ORDER = ["r64", "r32", "r16", "qf", "sf", "final"];
@@ -17,7 +17,7 @@ const L = (i) => String.fromCharCode(65 + i);
 
 const STAGE_TH = {
   r1: "รอบแบ่งกลุ่ม", r2: "รอบสอง", r64: "รอบ 64 ทีม", r32: "รอบ 32 ทีม",
-  r16: "รอบ 16 ทีม", qf: "รอบ 8 ทีม", sf: "รอบรองชนะเลิศ", third: "ชิงอันดับที่ 3", final: "ชิงชนะเลิศ", practice: "ซ้อม",
+  r16: "รอบ 16 ทีม", qf: "รอบ 8 ทีม", sf: "รอบรองชนะเลิศ", third: "ชิงอันดับที่ 3", final: "ชิงชนะเลิศ", practice: "ซ้อม", custom: "คู่ Custom",
 };
 export function stageLabel(st) {
   if (!st) return "";
