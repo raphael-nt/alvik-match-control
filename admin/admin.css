@@ -198,3 +198,5 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .cx .cxf{display:grid;grid-template-columns:1fr 1fr 110px;gap:10px;margin:10px 0}.cx .cxf label{display:grid;gap:4px;font-weight:500;min-width:0}.cx .cxf input,.cx .cxf select{width:100%;min-width:0}
 @media (max-width:700px){.cx .cxf{grid-template-columns:1fr}}
 .cx .tl{display:grid;gap:4px}.cx .tl .muted{font-size:13px}
+/* Referee panel : who is on each field colour this game */
+.rpw{margin:0;font-size:14px}.rpw .pill{margin-right:4px}

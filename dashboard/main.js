@@ -1,5 +1,5 @@
 // Dashboard (formerly TV), docs/DESIGN_v3.md section 5
-import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent, customMatch } from "../shared/common.js";
+import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs, FS_ICON, useMarks, connect, onChange, event, field, matches, match, openGame, gamesOf, gameNo, sideName, teamName, teamsArr, tableOf, groups, marksOf, clockV3, decideV3, fmtMs1, fmtTime, PHASE_EN, RULE_EN, esc, $, now, beep, netBadge, raf, paintNet, S, T, teamAbsent, customMatch, fieldSide } from "../shared/common.js";
 import { bracketHtml, fitBrackets, gamePills, roundTitle } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
@@ -30,7 +30,7 @@ function mode() {
   if ((F && F.status === "done") || (!F && allMatchesDone() && S.ranking.some((r) => r.pos === 1))) return "champion";
   const o = onField();
   if (o && o.m.stage === "custom") return "custom";   // the custom match on the field gets its own clock screen
-  return o ? "live" : "bracket";
+  return o ? "live" : "rounds";   // between matches : the schedule table of the round, not the whole bracket
 }
 
 // ---------- Live ----------
@@ -39,7 +39,8 @@ function liveView() {
   const { f, m } = o, g = openGame(m.code) || gamesOf(m.code).slice(-1)[0], rules = event().rules_mode !== false;
   const gn = g ? gameNo(m.code, g) : 1, L = liveLayout(event().dash_layout?.live);
   // Team panels show the team name only
-  const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
+  // Each colour panel shows the team on that colour in this game (teams swap colours every game)
+  const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, fieldSide(m.code, g, s)))}</div></div>`;
   const body = {
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
@@ -76,8 +77,9 @@ function gameTable(m, h) {
 }
 // Custom screen : the two names typed in Admin and the big clock, nothing else
 function customView() {
-  const X = customMatch(), nm = (s) => (X ? esc(sideName(X, s)) : s === "red" ? "Red" : "Blue");
-  const sc = X && X.bo > 1 ? `<div class="sc"><span class="c-r">${X.red_wins}</span> - <span class="c-b">${X.blue_wins}</span></div>` : "";
+  const X = customMatch(), g = X && (openGame("X") || gamesOf("X").slice(-1)[0]), r = X ? fieldSide("X", g, "red") : "red", b = r === "red" ? "blue" : "red";
+  const nm = (s) => (X ? esc(sideName(X, s === "red" ? r : b)) : s === "red" ? "Red" : "Blue");
+  const sc = X && X.bo > 1 ? `<div class="sc"><span class="c-r">${X[r + "_wins"]}</span> - <span class="c-b">${X[b + "_wins"]}</span></div>` : "";
   return `${head()}<div class="cu"><div class="lt side-r"><div class="n">${nm("red")}</div></div>
     <div class="lc"><div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>${sc}</div>
     <div class="lt side-b"><div class="n">${nm("blue")}</div></div></div><div id="cd"></div><div id="bn"></div>`;
@@ -209,7 +211,7 @@ raf(() => {
   if (ctCls !== _ctCls) { _ctCls = ctCls; ct.className = ctCls; }
   if (cpTxt !== _cp) { _cp = cpTxt; $("cp").textContent = cpTxt; }
   const m = match(f.match_code), g = m && openGame(m.code);
-  const cmTxt = ck.phase === "stopped" && g?.complete_side ? `${g.complete_side.toUpperCase()} mission complete ${fmtMs1(f.stop_ms)}` : "";
+  const cmTxt = ck.phase === "stopped" && g?.complete_side ? `${fieldSide(m.code, g, g.complete_side).toUpperCase()} mission complete ${fmtMs1(f.stop_ms)}` : "";
   if (cmTxt !== _cm) { _cm = cmTxt; $("cm").textContent = cmTxt; }
   const left = ck.phase === "countdown" ? Date.parse(f.go_at) - now() : 0;
   const cdHtml = ck.phase === "countdown" ? `<div class="cd">${countDigit(left)}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
@@ -223,7 +225,7 @@ raf(() => {
   // Once per Knockout : an undone Knockout followed by a new one shows again
   if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id + ":" + g.complete_ms) {
     koShown = g.id + ":" + g.complete_ms;
-    if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: sd, label: "Knockout", name: sd === "both" ? `${sideName(m, "red")} + ${sideName(m, "blue")}` : sideName(m, sd), detail: `Mission complete at ${fmtMs1(f.stop_ms)}, rule 6.1`, meta: `Match ${m.code} · Game ${gameNo(m.code, g)}` }); }
+    if (Date.now() - LOAD_T > 4000) { const sd = g.complete_side; popup({ kind: "ko", side: fieldSide(m.code, g, sd), label: "Knockout", name: sd === "both" ? `${sideName(m, "red")} + ${sideName(m, "blue")}` : sideName(m, sd), detail: `Mission complete at ${fmtMs1(f.stop_ms)}, rule 6.1`, meta: `Match ${m.code} · Game ${gameNo(m.code, g)}` }); }
   }
   if (m) {
     const gs = gamesOf(m.code), bnEl = $("bn");
@@ -240,9 +242,11 @@ raf(() => {
         lastDone = d.id + d.version;
         if (fresh) {
           const meta = `Match ${m.code} · Game ${gameNo(m.code, d)}`;
+          // Colour tag and score follow the field colours of the game that just ended
+          const fs = fieldSide(m.code, d, "red"), sc = [m[fs + "_wins"], m[(fs === "red" ? "blue" : "red") + "_wins"]];
           if (d.status === "replay") popup({ kind: "tie", label: "Tie", name: "Replay", detail: "Same field pattern, FAQ 34", meta });
-          else if (m.status === "done" && m.winner_seed != null) popup({ kind: "match", side: d.winner, label: "Match winner", name: teamName(m.winner_seed), detail: `${m.grp ? grpName(m.grp) : stageLabel(m.stage)}, Bo${m.bo}`, meta: `Match ${m.code}`, score: [m.red_wins, m.blue_wins] });
-          else popup({ kind: "game", side: d.winner, label: `Game ${gameNo(m.code, d)} winner`, name: sideName(m, d.winner), detail: RULE_EN[d.method] || "", meta, score: [m.red_wins, m.blue_wins] });
+          else if (m.status === "done" && m.winner_seed != null) popup({ kind: "match", side: fieldSide(m.code, d, d.winner), label: "Match winner", name: teamName(m.winner_seed), detail: `${m.grp ? grpName(m.grp) : stageLabel(m.stage)}, Bo${m.bo}`, meta: `Match ${m.code}`, score: sc });
+          else popup({ kind: "game", side: fieldSide(m.code, d, d.winner), label: `Game ${gameNo(m.code, d)} winner`, name: sideName(m, d.winner), detail: RULE_EN[d.method] || "", meta, score: sc });
         }
       }
     }

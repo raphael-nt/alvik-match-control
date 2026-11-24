@@ -1,5 +1,5 @@
 // Referee page v3: single field, central clock, checklist by criteria (docs/DESIGN_v3.md section 4)
-import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep as beepOn, netBadge, raf, now } from "../shared/common.js";
+import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep as beepOn, netBadge, raf, now, gameSwapped, flipSide, fieldSide } from "../shared/common.js";
 import { bracketHtml, fitBrackets, roundTableHtml } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
 import { unlock, countDigit, countdown, stopCount, endSound } from "../shared/sound.js";
@@ -66,9 +66,18 @@ function summary(g) {
     red_parked: c && (c.side === "red" || c.side === "both") ? 3 : park("red"), blue_parked: c && (c.side === "blue" || c.side === "both") ? 3 : park("blue"),
     red_retries: cnt("retry", "red"), blue_retries: cnt("retry", "blue"), marks: ms };
 }
+// The phone shows field colours. Even games swap the teams, so a field colour is turned into the match side before sending
+const toMatch = (g, side) => fieldSide(g.match_code, g, side);
+const fl = (x) => (x ? { ...x, side: flipSide(x.side) } : x);
+// Summary as seen on the field : sides and red_* / blue_* counts swapped in even games
+function summaryF(g) {
+  const s = summary(g); if (!gameSwapped(g.match_code, g)) return s;
+  return { ...s, exit: fl(s.exit), lift: fl(s.lift), complete: fl(s.complete), exit_side: flipSide(s.exit_side), lift_side: flipSide(s.lift_side), complete_side: flipSide(s.complete_side), winner: flipSide(s.winner),
+    red_parked: s.blue_parked, blue_parked: s.red_parked, red_retries: s.blue_retries, blue_retries: s.red_retries, marks: s.marks.map(fl) };
+}
 function mark(g, kind, side) {
   const f = field(1), ck = clockV3(f);
-  enqueue("a2_ref_mark", { p_game: g.id, p_id: uid(), p_kind: kind, p_side: side, p_t_ms: Math.round(ck.elapsed) });
+  enqueue("a2_ref_mark", { p_game: g.id, p_id: uid(), p_kind: kind, p_side: toMatch(g, side), p_t_ms: Math.round(ck.elapsed) });
   vib(); if (kind === "complete") beep(520, 600); else beep(990, 60);
 }
 function undo(g) {
@@ -93,7 +102,9 @@ async function keepAwake() { try { if (navigator.wakeLock && !wake) { wake = awa
 
 // ---------- Components ----------
 const bar = (m, g) => `<div class="bar"><b>Referee</b>${WATCH ? `<span class="wtag">Preview</span>` : ""}${m ? `<span class="bm">${esc(m.code)}${g ? ` Game ${gameNo(m.code, g)} of ${m.bo}` : ""}</span>` : ""}<span class="sp"></span>${fsOk ? `<button class="ib" data-fs aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>` : ""}${pin ? `<button class="ib" data-sheet="bracket" aria-label="Bracket" title="Bracket"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h3v10H8M11 12h4M15 10h6v4h-6z"/></svg></button>${event().docs_ref !== false ? `<button class="ib" data-sheet="docs" aria-label="Documents" title="Rules and FAQ"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></svg></button>` : ""}` : ""}${Q.length ? `<span class="qbadge">Saved on this phone, sending (${Q.length})</span>` : ""}${netBadge()}</div>`;
-const teams = (m) => `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, "red"))}</b><em>${m.red_wins}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, "blue"))}</b><em>${m.blue_wins}</em></div></div>`;
+// Team on each field colour for this game, with its match wins
+const teams = (m, g) => { const r = fieldSide(m.code, g, "red"), b = flipSide(r);
+  return `<div class="teams"><div class="tm side-r"><i>RED</i><b>${esc(sideName(m, r))}</b><em>${m[r + "_wins"]}</em></div><div class="tm side-b"><i>BLUE</i><b>${esc(sideName(m, b))}</b><em>${m[b + "_wins"]}</em></div></div>${gameSwapped(m.code, g) ? `<p class="muted center swp">Sides swapped this game</p>` : ""}`; };
 const clockBox = () => `<button type="button" class="clock tap" id="clock" data-stop><div class="t" id="ct">1:30.0</div><div class="l" id="cl"></div></button>`;
 const sideBtns = (key, both) => `<div class="pair"><button class="btn red big" data-mk="${key}" data-s="red">RED</button><button class="btn blue big" data-mk="${key}" data-s="blue">BLUE</button></div>${both ? `<button class="btn same" data-mk="${key}" data-s="both">Same time</button>` : ""}`;
 const sideTxt = (s) => (s === "both" ? "Same time" : s === "red" ? "RED first" : "BLUE first");
@@ -117,7 +128,7 @@ function waitingView() {
   const out = $("out"); if (out) out.onclick = () => { rpc("a2_ref_release", { p_pin: pin, p_device: device }).catch(() => {}); pin = ""; L("a2pin", null); ctl = null; render(true); };
 }
 function viewOnly(m) {
-  app.innerHTML = `${bar(m)}<div class="wrap center"><h2>View only</h2><p>มีเครื่องกรรมการอื่นใช้อยู่ ถ้าเครื่องนั้นเสีย ให้แอดมินกด "Transfer referee" แล้วหน้านี้จะรับสิทธิ์เอง</p>${teams(m)}${clockBox()}</div>`;
+  app.innerHTML = `${bar(m)}<div class="wrap center"><h2>View only</h2><p>มีเครื่องกรรมการอื่นใช้อยู่ ถ้าเครื่องนั้นเสีย ให้แอดมินกด "Transfer referee" แล้วหน้านี้จะรับสิทธิ์เอง</p>${teams(m, openGame(m.code))}${clockBox()}</div>`;
 }
 
 function matchView(f, m, g) {
@@ -130,7 +141,7 @@ function matchView(f, m, g) {
       ${replay ? `<p class="muted">เกมแข่งใหม่ ใช้แบบสนามเดิม (FAQ 34)</p>` : `<p class="muted">สุ่มก่อนเริ่ม Setup สองทีมใช้แบบเดียวกัน (2.3)</p>`}</section>
       <button class="btn primary big" data-fl="start" ${g.pattern ? "" : "disabled"}>Start setup ${fmtMs(event().setup_ms)}</button>
       <div class="row"><button class="btn" id="absent">Team absent</button></div>
-      ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บายฝั่ง ${m.absent_req.toUpperCase()} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}`;
+      ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บาย ${esc(sideName(m, m.absent_req))} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}`;
   } else if (ph === "setup" || ph === "ready") {
     const c = f.checks || {}, all = c.red_in && c.blue_in && c.stands;
     const ck1 = (k, t, h) => `<label class="chk"><input type="checkbox" data-ck="${k}" ${c[k] ? "checked" : ""}><span>${t}<small>${h}</small></span></label>`;
@@ -147,7 +158,7 @@ function matchView(f, m, g) {
   } else if (ph === "game") {
     body = liveBody(g, f);
   } else body = reviewBody(f, m, g);
-  app.innerHTML = `${bar(m, g)}<div class="wrap">${teams(m)}<p class="muted center">Pattern ${g.pattern || "-"} · ${PHASE_EN[ph]}</p>${body}</div>`;
+  app.innerHTML = `${bar(m, g)}<div class="wrap">${teams(m, g)}<p class="muted center">Pattern ${g.pattern || "-"} · ${PHASE_EN[ph]}</p>${body}</div>`;
   bindMatch(f, m, g);
   tickClock();
 }
@@ -156,21 +167,21 @@ function matchView(f, m, g) {
 function simpleView(m, g) {
   const done = gamesOf(m.code).filter((x) => x.status === "done");
   const last = done[done.length - 1];
-  app.innerHTML = `${bar(m, g)}<div class="wrap">${teams(m)}
+  app.innerHTML = `${bar(m, g)}<div class="wrap">${teams(m, g)}
     <section class="center"><h3 style="justify-content:center">Game ${gameNo(m.code, g)} of ${m.bo}</h3><p class="hint">กดค้างที่สีของฝั่งที่ชนะเกมนี้</p>
       <div class="pair"><button class="btn red big hold" style="min-height:120px" data-win="red">RED wins<i></i></button><button class="btn blue big hold" style="min-height:120px" data-win="blue">BLUE wins<i></i></button></div></section>
     ${last ? `<p class="muted center">Last game: ${last.winner.toUpperCase()} won game ${gameNo(m.code, last)}. แก้ผลได้ที่แอดมิน</p>` : ""}
     <div class="row"><button class="btn" id="absent">Team absent</button></div>
-    ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บายฝั่ง ${m.absent_req.toUpperCase()} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}</div>`;
-  app.querySelectorAll("[data-win]").forEach((b) => holdBind(b, 600, () => call("a2_ref_winner", { p_game: g.id, p_side: b.dataset.win }).then(() => { beep(990, 200); afterGame(m.code); }).catch(() => {})));
-  const ab = $("absent"); if (ab) ab.onclick = () => { const sd = prompt("ทีมที่ไม่มา พิมพ์ red หรือ blue"); if (sd === "red" || sd === "blue") call("a2_ref_absent", { p_side: sd }).catch(() => {}); };
+    ${m.absent_req ? `<p class="warn">ส่งคำขอแพ้บาย ${esc(sideName(m, m.absent_req))} แล้ว รอแอดมินอนุมัติ <button class="btn small" id="absentx">Cancel</button></p>` : ""}</div>`;
+  app.querySelectorAll("[data-win]").forEach((b) => holdBind(b, 600, () => call("a2_ref_winner", { p_game: g.id, p_side: toMatch(g, b.dataset.win) }).then(() => { beep(990, 200); afterGame(m.code); }).catch(() => {})));
+  const ab = $("absent"); if (ab) ab.onclick = () => { const sd = prompt("ทีมที่ไม่มา พิมพ์สีฝั่งในเกมนี้ red หรือ blue"); if (sd === "red" || sd === "blue") call("a2_ref_absent", { p_side: toMatch(g, sd) }).catch(() => {}); };
   const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
 }
 
 // KNOCKOUT tag when a side has 3 stands parked or was given Mission complete
 const ko = (s, side) => (s[side + "_parked"] >= 3 || s.complete_side === side || s.complete_side === "both" ? `<em class="ko">KNOCKOUT</em>` : "");
 function liveBody(g) {
-  const s = summary(g);
+  const s = summaryF(g);
   const row = (no, title, rule, hint, key, done, both) => `<section class="crit${done ? " done" : ""}"><h3><span>${no}</span>${title} <small>(${rule})</small></h3>${hint ? `<p class="hint">${hint}</p>` : ""}
     ${done ? `<div class="res ${done.side === "red" ? "c-r" : done.side === "blue" ? "c-b" : ""}">${sideTxt(done.side)} <b>${fmtMs1(done.t_ms)}</b>${done.pending ? " <i>sending</i>" : ""}</div>` : sideBtns(key, both)}</section>`;
   const next = !s.exit ? 1 : !s.lift ? 2 : 3;
@@ -190,7 +201,7 @@ function liveBody(g) {
 }
 
 function reviewBody(f, m, g) {
-  const s = summary(g), p = g.need === "judge" ? { need: "judge" } : decideV3(s);
+  const s = summaryF(g), p = g.need === "judge" ? { need: "judge" } : decideV3(s);
   const stopped = f.phase === "stopped";
   const ln = (t, v) => `<div class="ln"><span>${t}</span><span>${v}</span></div>`;
   const ev = (x) => (x ? `<b class="${x.side === "red" ? "c-r" : x.side === "blue" ? "c-b" : ""}">${sideTxt(x.side).replace(" first", "")}</b> ${fmtMs1(x.t_ms)}` : "-");
@@ -224,11 +235,11 @@ function bindMatch(f, m, g) {
   app.querySelectorAll("[data-ck]").forEach((b) => (b.onchange = () => call("a2_ref_check", { p_item: b.dataset.ck, p_on: b.checked }).then((r) => { const x = field(1); if (x) x.checks = r; render(true); }).catch(() => render(true))));
   const go = $("go"); if (go) go.onclick = () => { go.disabled = true; call("a2_ref_go", {}).catch(() => {}); };
   const ag = $("again"); if (ag) ag.onclick = setupAgain;
-  const ab = $("absent"); if (ab) ab.onclick = () => { const s = prompt("ทีมที่ไม่มา พิมพ์ red หรือ blue"); if (s === "red" || s === "blue") call("a2_ref_absent", { p_side: s }).catch(() => {}); };
+  const ab = $("absent"); if (ab) ab.onclick = () => { const s = prompt("ทีมที่ไม่มา พิมพ์สีฝั่งในเกมนี้ red หรือ blue"); if (s === "red" || s === "blue") call("a2_ref_absent", { p_side: toMatch(g, s) }).catch(() => {}); };
   const ax = $("absentx"); if (ax) ax.onclick = () => call("a2_ref_absent", { p_side: null }).catch(() => {});
   app.querySelectorAll("[data-mk]").forEach((b) => (b.onclick = async () => {
     const k = b.dataset.mk, sd = b.dataset.s, live = clockV3(field(1)).phase === "game";
-    if (k === "park" && live && summary(g)[sd + "_parked"] === 2) {
+    if (k === "park" && live && summaryF(g)[sd + "_parked"] === 2) {
       if (await ask(`${sd.toUpperCase()} จอดครบ 3 แท่น`, "Knockout แล้วหยุดเวลาทันที", "Knockout")) mark(g, "complete", sd);
       return;
     }
@@ -244,7 +255,7 @@ function bindMatch(f, m, g) {
     call("a2_ref_ko_undo", { p_game: g.id }).then((r) => { if (r && r.id) T.a2_game.set(r.id, r); render(true); }).catch(() => {});
   };
   const c = $("confirm"); if (c) c.onclick = () => { c.disabled = true; call("a2_ref_confirm", { p_game: g.id }).then((r) => { reviewOk = { held: false, seen: false }; toast(r === "replay" ? "เสมอ แข่งใหม่แบบสนามเดิม" : r === "judge" ? "กรรมการต้องตัดสิน" : r.toUpperCase() + " wins"); afterGame(m.code); }).catch(() => {}); };
-  app.querySelectorAll("[data-judge]").forEach((b) => (b.onclick = () => call("a2_ref_judge", { p_game: g.id, p_side: b.dataset.judge }).then(() => { reviewOk = { held: false, seen: false }; afterGame(m.code); }).catch(() => {})));
+  app.querySelectorAll("[data-judge]").forEach((b) => (b.onclick = () => call("a2_ref_judge", { p_game: g.id, p_side: toMatch(g, b.dataset.judge) }).then(() => { reviewOk = { held: false, seen: false }; afterGame(m.code); }).catch(() => {})));
 }
 function afterGame(code) { setTimeout(() => { const m = match(code); if (m && m.status === "done") { finished = { code, winner: teamName(m.winner_seed) }; setTimeout(() => { finished = null; render(true); }, 15000); } render(true); }, 600); }
 function holdBind(btn, ms, fn) {

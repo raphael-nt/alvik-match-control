@@ -82,6 +82,21 @@ export const gameNo = (code, g) => {
   for (const x of gamesOf(code)) { if (x.idx <= g.idx && x.status !== "replay") n++; }
   return n;
 };
+// Teams swap colours every game : odd games keep the match sides, even games swap them. A replay (tie) keeps the
+// colours of the game it replays. Stored data always uses the match sides (red = red_seed team), so results go to
+// the right team; the pages turn the field colour into the match side before sending, and back when showing.
+export const flipSide = (s) => (s === "red" ? "blue" : s === "blue" ? "red" : s);
+export const gameNumber = (code, g) => (g ? gameNo(code, g) + (g.status === "replay" ? 1 : 0) : 1);
+export const gameSwapped = (code, g) => !!g && gameNumber(code, g) % 2 === 0;
+// Field colour of a match side in this game (the same flip turns a field colour back into the match side)
+export const fieldSide = (code, g, side) => (gameSwapped(code, g) ? flipSide(side) : side);
+// A game row seen from the field : red_* and blue_* fields and every side swapped in even games
+export function fieldGame(code, g) {
+  if (!gameSwapped(code, g)) return g;
+  return { ...g, red_parked: g.blue_parked, blue_parked: g.red_parked, red_retries: g.blue_retries, blue_retries: g.red_retries,
+    exit_side: flipSide(g.exit_side), lift_side: flipSide(g.lift_side), complete_side: flipSide(g.complete_side), winner: flipSide(g.winner) };
+}
+
 // Which day the bracket shows, set in Admin > Dashboard and kept in dash_layout.bk
 // "practice" or "comp" force a day. Auto (anything else) shows practice while practice matches are open and no real game has been played.
 // Practice falls back to the real bracket when there are no practice matches, so the screen is never blank.
