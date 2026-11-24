@@ -49,3 +49,8 @@ Round robin, every match Bo3, 16 matches in total. Ranking: matches won, game di
 - SQL is in `supabase/migrations/` (001 to 011). `supabase/tests/008_v3_test.sql` tests the v3 logic inside a transaction that rolls back.
 - Design: `docs/DESIGN_v3.md` (current) and `docs/DESIGN.md` (v2 and how it was built).
 - `index.html` at the root links to the three pages. The old v1 system lives in `/legacy/`.
+- Sounds : `shared/sound.js` plays the 3 2 1 countdown (its start sound lands on GO) and the end sound on the Dashboard and the referee phone. Effects such as Knockout are short tones with no voice.
+
+## Credit
+
+The 3 2 1 countdown and end sounds in `shared/sounds/timer.mp3` come from the video "UPDATED VEX IQ Official Timer with 3 sec countdown" by Ben Lipper on YouTube, as used in VEX Unofficial Timer.

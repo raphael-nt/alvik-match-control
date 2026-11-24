@@ -855,12 +855,14 @@ document.addEventListener("click", (e) => {
 // ---------- Dashboard tab ----------
 function tvView() {
   const ev = event(), cur = ev.tv_mode || "auto";
-  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "คู่ทั้งรอบ แดงและน้ำเงินตามฝั่ง ผลรายเกม"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
-  const rnd = ev.dash_layout?.rnd || "auto";
+  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางสาย จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"]];
+  const rnd = ev.dash_layout?.rnd || "auto", bkh = new Set(ev.dash_layout?.bkh || []);
   return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
    <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>
    <div class="h2" style="margin-top:20px"><h2>รอบในตารางคู่รายรอบ</h2><span>อัตโนมัติจะแสดงรอบของคู่บนสนาม ถ้าไม่มีใช้รอบของคู่ถัดไป</span></div>
    <div class="btns">${[["auto", "อัตโนมัติ"], ...roundList().map((r) => [r.key, roundTitle(r)])].map(([k, t]) => `<button class="btn ${rnd === k ? "" : "primary"}" data-act="rndshow" data-m="${esc(k)}" ${rnd === k ? "disabled" : ""}>${esc(t)}</button>`).join("")}</div>
+   <div class="h2" style="margin-top:20px"><h2>รอบที่แสดงในตารางสาย</h2><span>ติ๊กออกเพื่อซ่อนรอบนั้นจากตารางสายบนจอ Dashboard ทั้งหน้าตารางสายและแถบสายตอนถ่ายทอดสด</span></div>
+   <div class="pteams">${roundList().map((r) => `<label class="chk2"><input type="checkbox" data-act="bkr" data-m="${esc(r.key)}" ${bkh.has(r.key) ? "" : "checked"}>${esc(roundTitle(r))}</label>`).join("")}</div>
    ${adv("bk", "ขั้นสูง : ตารางสายแสดงคู่ซ้อมหรือการแข่งจริง", `<p class="muted">อัตโนมัติจะแสดงคู่ซ้อมจนกว่าซ้อมจบหรือเริ่มแข่งจริง ตอนนี้แสดง${bracketMode() === "practice" ? "คู่ซ้อม" : "การแข่งจริง"}</p><div class="btns">${BK_MODES.map(([k, t]) => `<button class="btn ${bracketSetting() === k ? "" : "primary"}" data-act="bkshow" data-m="${k}" ${bracketSetting() === k ? "disabled" : ""}>${BK_TH[k] || t}</button>`).join("")}</div>`)}
    <div class="btns" style="margin-top:14px"><a class="btn" href="../dashboard/" target="_blank" rel="noopener">เปิดจอ Dashboard</a></div>`;
 }
@@ -1135,6 +1137,13 @@ const H = {
   async tvauto() { await act(() => adm("a2_adm_event", { p: { tv_mode: "auto" } }), "จอ Dashboard กลับเป็นอัตโนมัติ"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
+  // The boxes on screen are the truth : save every unticked round, no redraw, untick again if saving fails
+  async bkr(b) {
+    const bkh = [...document.querySelectorAll('[data-act="bkr"]')].filter((x) => !x.checked).map((x) => x.dataset.m);
+    try { await adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bkh } } }); toast("เปลี่ยนรอบในตารางสายแล้ว"); }
+    catch (e) { b.checked = !b.checked; toast(e.message || "บันทึกไม่สำเร็จ", true); }
+    loadAll().catch(() => {});
+  },
   async bkshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bk: b.dataset.m } } }), "เปลี่ยนตารางสายแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async docadd() {
     const f = $("df").files[0], title = $("dt").value.trim() || (f && f.name.replace(/\.[^.]+$/, ""));

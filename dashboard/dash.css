@@ -177,20 +177,25 @@ body.cur,body.cur *{cursor:default}
 /* Round view : every match of one round, red and blue sides, score and game pills */
 .rv{flex:1;display:grid;align-content:start;gap:14px;background:var(--panel);border-radius:10px;padding:24px 32px;min-height:0}
 .rv h2{font-size:44px;display:flex;align-items:baseline;gap:20px}.rv h2 span{font-size:26px;color:var(--muted);font-weight:500}
-.rv-rows{display:grid;gap:12px}
-.rv-g{font-size:28px;font-weight:700;color:var(--tape);padding-top:6px}
-.rv-r{display:grid;grid-template-columns:100px 1fr 220px 1fr 150px;gap:14px;align-items:center;height:var(--rh)}
-.rv-r>b{font-size:30px;color:var(--muted)}
-.rv-r>em{font-style:normal;font-size:26px;color:var(--muted);text-align:right}.rv-r>em.on{color:var(--tape);font-weight:700}
-.rv-s{height:100%;display:flex;align-items:center;padding:0 22px;border-radius:10px;font-size:36px;font-weight:600;min-width:0;background:var(--cs);border-left:10px solid var(--c)}
-.rv-s.side-b{border-left:0;border-right:10px solid var(--c);justify-content:flex-end}
-.rv-s span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rv-r.done .rv-s:not(.win){opacity:.55}
-.rv-s.win{box-shadow:inset 0 0 0 3px var(--tape)}
-.rv-m{display:grid;justify-items:center;gap:6px}
-.rv-sc{font-size:40px;font-weight:800;color:var(--muted)}.rv-sc .r{color:#ff7a6e}.rv-sc .b{color:#7ea2ff}
-.rv-p{display:flex;gap:6px;font-size:24px;min-height:1.35em}
-.rv-r.live .rv-s,.rv-r.queued .rv-s{box-shadow:inset 0 0 0 3px var(--tape)}
+/* Rounds screen : full schedule table of one round. Team cells carry the Game 1 colour */
+.st{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:30px}
+.st th{font-size:22px;font-weight:600;color:var(--muted);text-align:left;padding:0 14px;letter-spacing:.04em}
+.st th small{font-size:18px;font-weight:500;opacity:.8;margin-left:6px}.st th.c-r{color:#ff7a6e}.st th.c-b{color:#7ea2ff;text-align:right}
+.st td{padding:0 14px;height:var(--rh);vertical-align:middle;white-space:nowrap}
+.st-tm{width:120px;color:var(--muted);font-variant-numeric:tabular-nums}
+.st-c{width:110px;font-weight:700}
+.st-t{padding:0 6px!important}
+.st-t>div{height:calc(var(--rh) - 8px);display:flex;align-items:center;padding:0 20px;border-radius:10px;font-weight:600;background:var(--cs);border-left:10px solid var(--c);max-width:560px}
+.st-t>.side-b{border-left:0;border-right:10px solid var(--c);justify-content:flex-end;margin-left:auto}
+.st-t span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.st-t>.win{box-shadow:inset 0 0 0 3px var(--tape)}
+.st-sc{width:120px;text-align:center;font-weight:800;color:var(--muted)}.st-sc .r{color:#ff7a6e}.st-sc .b{color:#7ea2ff}
+.st-bo{width:90px;color:var(--muted);text-align:center}
+.st-res{width:300px;font-size:24px}.st-res em{font-style:normal}.st-res em.on{color:var(--tape);font-weight:700}
+.st-p{display:flex;gap:6px;font-size:20px;margin-top:4px}.st-p:empty{display:none}
+.st-r.done .st-t>div:not(.win){opacity:.55}
+.st-r.onf td{background:#ffffff0d}.st-r.onf td:first-child{border-radius:10px 0 0 10px;box-shadow:inset 6px 0 0 var(--tape)}.st-r.onf td:last-child{border-radius:0 10px 10px 0}
+.st-g td{height:auto;padding-top:10px;font-size:26px;font-weight:700;color:var(--tape)}
 .sched .gp2{display:flex;gap:6px;font-size:22px;align-items:center}
 /* Event name sits on the same line as the iRAP wordmark at the bottom of the logo */
 .top img,.top h1,.top .rnd,.pop8 .h8 img,.pop8 .h8 span,.pop8 .h8 b{align-self:baseline}

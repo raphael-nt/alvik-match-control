@@ -13,8 +13,10 @@ function setPreview(data) {
 }
 // Live data shows one day only : practice matches, or the real groups and knockout (set per render in bracketHtml)
 let SHOW = "comp";
-const _groups = () => (PV ? PV.groups : SHOW === "practice" ? [] : groups());
-const _matches = () => (PV ? PV.matches : matches().filter((m) => (m.stage === "practice") === (SHOW === "practice")));
+// Rounds left out of this drawing, by round key (bracketHtml({ hide: [...] }), live data only)
+let HIDE = null;
+const _groups = () => (PV ? PV.groups : SHOW === "practice" ? [] : groups().filter((g) => !HIDE || !HIDE.has(g.stage || "r1")));
+const _matches = () => (PV ? PV.matches : matches().filter((m) => (m.stage === "practice") === (SHOW === "practice") && (!HIDE || !HIDE.has(roundKey(m)))));
 const _match = (c) => (PV ? PV.byCode.get(c) : match(c));
 const _table = (g) => {
   if (!PV) return tableOf(g);
@@ -355,6 +357,7 @@ export function bracketHtml(opts = {}) {
   setPreview(opts.data || null);
   SHOW = opts.data ? "comp" : opts.show || bracketMode();
   IS_COMPACT = !!opts.compact;
+  HIDE = !opts.data && opts.hide && opts.hide.length ? new Set(opts.hide) : null;
   useDims(IS_COMPACT ? COMPACT : FULL);
   const mByGrp = new Map();
   _matches().forEach((m) => {
@@ -366,7 +369,7 @@ export function bracketHtml(opts = {}) {
   const wireHtml = wires(st);
   const { boxes, finalKey, W, H } = st;
   const body = Object.values(boxes).map((b) => boxHtml(b, !!opts.clickable, mByGrp, !!opts.rounds && !opts.data)).join("") + (IS_COMPACT ? "" : champHtml(boxes, finalKey));
-  IS_COMPACT = false; useDims(FULL); setPreview(null);
+  IS_COMPACT = false; HIDE = null; useDims(FULL); setPreview(null);
   return `<div class="bk${opts.dark ? " dark" : ""}${opts.compact ? " compact" : ""}" data-bk data-w="${W}" data-h="${H}"${opts.maxh ? ` data-maxh="${opts.maxh}"` : ""}><div class="bk-stage" style="width:${W}px;height:${H}px"><svg class="bk-wires" width="${W}" height="${H}" aria-hidden="true">${wireHtml}</svg>${body}</div></div>`;
 }
 

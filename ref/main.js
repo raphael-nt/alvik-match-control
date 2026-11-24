@@ -2,6 +2,7 @@
 import { fsSupported, toggleFs, useMarks, connect, onChange, paintNet, rpc, loadAll, S, T, event, field, match, matches, openGame, gamesOf, gameNo, sideName, teamName, marksOf, clockV3, decideV3, fmtMs1, fmtMs, fmtTime, PHASE_EN, RULE_EN, RULE_TH, esc, $, toast, beep as beepOn, netBadge, raf, now } from "../shared/common.js";
 import { bracketHtml, fitBrackets, roundTableHtml } from "../shared/bracket.js";
 import { listDocs, showDoc, closeX, docRows } from "../shared/docs.js";
+import { unlock, countDigit, countdown, stopCount, endSound } from "../shared/sound.js";
 // Fullscreen button shows only where the browser supports it (not on iPhone Safari)
 // Watch mode (ref/?watch=1) : the preview window in Admin. Shows what the referee sees for the match on the field,
 // never signs in, never takes the referee role, sends nothing and plays no sound
@@ -263,17 +264,18 @@ function tickClock() {
     if (isPaused !== _rPaused) { _rPaused = isPaused; $("clock").classList.toggle("paused", isPaused); }
     if (isWarn !== _rWarn) { _rWarn = isWarn; $("clock").classList.toggle("warn", isWarn); }
   }
+  const left = ck.phase === "countdown" ? Date.parse(f.go_at) - now() : 0;
   const cn = $("count");
   if (cn && ck.count) {
-    const cntTxt = String(ck.count);
+    const cntTxt = String(countDigit(left));
     if (cn.textContent !== cntTxt) { _rCnt = cntTxt; cn.textContent = cntTxt; }
   }
   const sec = ck.phase === "countdown" ? ck.count : ck.phase === "game" ? Math.ceil(ck.ms / 1000) : null;
   const pPh = lastPh, pSec = lastSec; lastPh = ck.phase; lastSec = sec;
-  if (ck.phase === "countdown" && sec !== pSec) beep(880, 120);
-  if (ck.phase === "game" && pPh === "countdown") beep(1320, 700);
-  if (ck.phase === "game" && sec <= 5 && sec > 0 && sec !== pSec) beep(880, 90);
-  if (ck.phase === "over" && pPh === "game") beep(440, 900);
+  // VEX timer sounds : 3 2 1 with the start sound on GO, the end sound when time is up or the clock stops
+  if (!WATCH && ck.phase === "countdown") countdown(f.go_at, left);
+  else if (pPh === "countdown" && ck.phase !== "game") stopCount();
+  if (!WATCH && (ck.phase === "over" || ck.phase === "stopped") && pPh === "game") endSound();
   if (pPh === "setup" && ck.phase === "ready") beep(660, 400);
   // Time is up: ask the server to advance now instead of waiting for the 8 s tick
   if (((ck.phase === "setup" && ck.ms <= 0) || (f.phase === "game" && ck.phase === "over")) && Date.now() - (tickClock.t || 0) > 1500) { tickClock.t = Date.now(); rpc("a2_tick").catch(() => {}); }
@@ -300,6 +302,7 @@ function render(force) {
 }
 onChange(() => render());
 if (WATCH) { document.body.classList.add("watch"); app.inert = true; }
+else ["pointerdown", "touchend"].forEach((ev) => addEventListener(ev, unlock, { passive: true }));   // phones allow sound only after a tap
 connect();
 raf(tickClock);
 setInterval(() => { if (pin && S.ready) rpc("a2_ref_heartbeat", { p_pin: pin, p_device: device }).then((ok) => { if (!ok || (ctl && !ctl.control)) claim(); }).catch(() => {}); }, 10000);

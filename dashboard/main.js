@@ -3,19 +3,20 @@ import { grpName, hasGrpLabel, roundKey, roundList, fsSupported, toggleFs, isFs,
 import { bracketHtml, fitBrackets, gamePills, roundTitle } from "../shared/bracket.js";
 import { stageLabel } from "../shared/format.js";
 import { liveLayout } from "../shared/layout.js";
+import { unlock, tone, countDigit, countdown, stopCount, endSound } from "../shared/sound.js";
 
 useMarks();
 const stage = $("stage");
 function fit() { const k = Math.min(innerWidth / 1920, innerHeight / 1080); stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px,${(innerHeight - 1080 * k) / 2}px) scale(${k})`; stage.style.left = 0; stage.style.top = 0; }
 addEventListener("resize", fit); fit();
 let sound = false;
-$("fs").onclick = async () => { try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; beep(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
-const snd = (f, ms) => sound && beep(f, ms);
+$("fs").onclick = async () => { unlock(); try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; tone(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
+const snd = (f, ms, at) => sound && tone(f, ms, at);
 // Embedded in the Admin preview window (dashboard/?embed=1) : no fullscreen prompt, stays silent
 if (new URLSearchParams(location.search).has("embed")) $("fs").remove();
 
 // Header on every screen; an announcement from Admin shows as a bar over the top of the screen
-const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${netBadge()}${fsSupported() ? `<button class="fsh" data-fsh aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
+const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${fsSupported() ? `<button class="fsh" data-fsh aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
 const upNext = (n = 3) => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no).slice(0, n);
 const upNextHtml = () => `<div class="upn"><h3>Up next</h3>${upNext().map((m) => `<div><b>${m.code}</b><span>${esc(sideName(m, "red"))}<em> vs ${esc(sideName(m, "blue"))}</em></span><span>${m.sched_at ? fmtTime(m.sched_at) : ""}</span></div>`).join("") || "<div>-</div>"}</div>`;
 
@@ -38,16 +39,17 @@ function liveView() {
   // Team panels show the team name only
   const tm = (s) => `<div class="lt ${s === "red" ? "side-r" : "side-b"}"><div class="n">${esc(sideName(m, s))}</div></div>`;
   const body = {
-    info: `<div class="lh">${m.grp ? `<span><b>${esc(grpName(m.grp))}</b></span>` : `<span>${stageLabel(m.stage)}</span>`}<span>Match <b>${m.code}</b></span><span>Game <b>${gn} of ${m.bo}</b></span>${gamesOf(m.code).some((x) => x.status === "done" || x.status === "replay") ? `<span class="lh-p">${gamePills(m)}</span>` : ""}${rules ? `<span>Pattern <b>${g?.pattern || "-"}</b></span>` : ""}</div>`,
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
-    bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16 })}</div>`,
+    bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16, hide: bkHide() })}</div>`,
     upnext: upNextHtml(),
   };
-  return `${head("● LIVE")}${Object.entries(L).filter(([, p]) => p.on).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
+  return `${head()}${Object.entries(L).filter(([k, p]) => p.on && body[k]).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
 }
 // Bracket fills the height; Up next sits in a narrow column on the right
-function bracketView() { return `${head()}<div class="bkfull"><div class="bkarea">${bracketHtml({ dark: true, maxh: 940 })}</div>${upNextHtml()}</div>`; }
+function bracketView() { return `${head()}<div class="bkfull"><div class="bkarea">${bracketHtml({ dark: true, maxh: 940, hide: bkHide() })}</div>${upNextHtml()}</div>`; }
+// Rounds Admin unticked in Dashboard > rounds shown in the bracket
+const bkHide = () => event().dash_layout?.bkh || [];
 function tableRows(G, adv) {
   const rows = tableOf(G).map((r) => `<tr class="${r.sure && r.pos <= adv ? "q" : ""}"><td class="p">${r.sure ? r.pos : "-"}</td><td>${r.seed != null ? esc(teamName(r.seed)) + (teamAbsent(r.seed) ? " (absent)" : "") : "TBD"}</td><td class="n">${r.mw}-${r.ml}</td><td class="n">${r.gw}-${r.gl}</td></tr>`).join("");
   return `<tr class="th"><td></td><td></td><td class="n">W-L</td><td class="n">Games</td></tr>` + rows;
@@ -95,18 +97,26 @@ function pickRound(list) {
 function roundsView() {
   const list = roundList(); if (!list.length) return `${head("Matches")}<div class="rv"><h2>No matches</h2></div>`;
   const r = pickRound(list), f = field(1);
-  const n = r.ms.length + new Set(r.ms.map((m) => m.grp || "")).size - 1;
-  const rh = Math.max(48, Math.min(92, Math.floor((790 - 12 * Math.max(0, n - 1)) / Math.max(1, n))));
-  const cell = (m, s) => `<div class="rv-s ${s === "red" ? "side-r" : "side-b"}${m.winner_seed != null && m.winner_seed === m[s + "_seed"] ? " win" : ""}"><span>${esc(sideName(m, s))}</span></div>`;
-  const st = (m) => (f && f.match_code === m.code && m.status !== "done" ? `<em class="on">On field</em>` : m.status === "done" ? `<em>${m.walkover ? "Walkover" : "Final"}</em>` : m.sched_at ? `<em>${fmtTime(m.sched_at)}</em>` : "<em></em>");
+  // One row per match : time, match, the two teams in their Game 1 colours (sides swap every game after that), Bo, result
+  const multi = new Set(r.ms.map((m) => m.grp || "")).size > 1;
+  const n = r.ms.length + (multi ? new Set(r.ms.map((m) => m.grp || "")).size : 0);
+  const rh = Math.max(40, Math.min(76, Math.floor(700 / Math.max(1, n)) - 8));
+  const team = (m, s) => `<td class="st-t"><div class="${s === "red" ? "side-r" : "side-b"}${m.winner_seed != null && m.winner_seed === m[s + "_seed"] ? " win" : ""}"><span>${esc(sideName(m, s))}</span></div></td>`;
+  const res = (m) => {
+    if (f && f.match_code === m.code && m.status !== "done") return `<em class="on">On field</em>`;
+    if (m.status === "done") return m.walkover ? `<em>Walkover</em>` : `<em>${esc(teamName(m.winner_seed))} wins</em>`;
+    return `<em class="muted">${m.status === "locked" ? "Waiting" : "Ready"}</em>`;
+  };
   let prevG = null;
   const rows = r.ms.map((m) => {
-    const sec = m.grp && m.grp !== prevG && r.ms.some((x) => x.grp && x.grp !== m.grp) ? `<div class="rv-g">${esc(grpName(m.grp))}</div>` : "";
+    const sec = multi && m.grp !== prevG ? `<tr class="st-g"><td colspan="7">${esc(m.grp ? grpName(m.grp) : roundTitle(r))}</td></tr>` : "";
     prevG = m.grp;
     const started = m.red_wins + m.blue_wins > 0 || m.status === "done";
-    return `${sec}<div class="rv-r ${m.status}"><b>${esc(m.code)}</b>${cell(m, "red")}<div class="rv-m"><div class="rv-sc">${started ? `<span class="r">${m.red_wins}</span>-<span class="b">${m.blue_wins}</span>` : "vs"}</div><div class="rv-p">${gamePills(m)}</div></div>${cell(m, "blue")}${st(m)}</div>`;
+    const on = f && f.match_code === m.code && m.status !== "done";
+    return `${sec}<tr class="st-r ${m.status}${on ? " onf" : ""}"><td class="st-tm">${m.sched_at ? fmtTime(m.sched_at) : ""}</td><td class="st-c">${esc(m.code)}</td>${team(m, "red")}<td class="st-sc">${started ? `<span class="r">${m.red_wins}</span>-<span class="b">${m.blue_wins}</span>` : "vs"}</td>${team(m, "blue")}<td class="st-bo">Bo${m.bo}</td><td class="st-res">${res(m)}<div class="st-p">${gamePills(m)}</div></td></tr>`;
   }).join("");
-  return `${head(esc(roundTitle(r)))}<div class="rv" style="--rh:${rh}px"><h2>${esc(roundTitle(r))}<span>Bo${Math.max(...r.ms.map((m) => m.bo))} · ${r.ms.filter((m) => m.status === "done").length} of ${r.ms.length} matches played</span></h2><div class="rv-rows">${rows}</div></div>`;
+  return `${head(esc(roundTitle(r)))}<div class="rv" style="--rh:${rh}px"><h2>${esc(roundTitle(r))}<span>${r.ms.filter((m) => m.status === "done").length} of ${r.ms.length} matches played</span></h2>
+    <table class="st"><thead><tr><th>Time</th><th>Match</th><th class="c-r">RED <small>Game 1</small></th><th></th><th class="c-b">BLUE <small>Game 1</small></th><th>Bo</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function drawView() {
   if (event().draw_state && event().draw_state.live) return liveDrawView();
@@ -165,12 +175,13 @@ raf(() => {
   const m = match(f.match_code), g = m && openGame(m.code);
   const cmTxt = ck.phase === "stopped" && g?.complete_side ? `${g.complete_side.toUpperCase()} mission complete ${fmtMs1(f.stop_ms)}` : "";
   if (cmTxt !== _cm) { _cm = cmTxt; $("cm").textContent = cmTxt; }
-  const cdHtml = ck.phase === "countdown" ? `<div class="cd">${ck.count}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
+  const left = ck.phase === "countdown" ? Date.parse(f.go_at) - now() : 0;
+  const cdHtml = ck.phase === "countdown" ? `<div class="cd">${countDigit(left)}</div>` : ck.phase === "game" && ck.elapsed < 700 ? `<div class="cd">GO</div>` : "";
   if (cdHtml !== _cd) { _cd = cdHtml; $("cd").innerHTML = cdHtml; }
-  if (ck.phase === "countdown" && sec !== ls) { snd(880, 160); say(String(sec)); }
-  if (ck.phase === "game" && lp === "countdown") { snd(1320, 700); say("Go"); }
-  if (ck.phase === "game" && sec <= 5 && sec > 0 && sec !== ls) snd(880, 90);
-  if ((ck.phase === "over" && lp === "game") || (ck.phase === "stopped" && lp === "game")) snd(440, 900);
+  // VEX timer sounds : 3 2 1 with the start sound on GO, the end sound when time is up or the clock stops
+  if (sound && ck.phase === "countdown") countdown(f.go_at, left);
+  else if (lp === "countdown" && ck.phase !== "game") stopCount();
+  if (sound && (ck.phase === "over" || ck.phase === "stopped") && lp === "game") endSound();
   lp = ck.phase; ls = sec;
   // Knockout : Mission complete stops the clock, show it once per game
   if (g && ck.phase === "stopped" && g.complete_side && koShown !== g.id) {
@@ -211,21 +222,17 @@ if (fsSupported()) {
   document.addEventListener("click", async (e) => {
     if (!e.target.closest("[data-fsh]")) return;
     try { await toggleFs(); } catch (er) {}
-    if (!sound) { sound = true; beep(660, 80); $("fs")?.remove(); }
+    unlock();
+    if (!sound) { sound = true; tone(660, 80); $("fs")?.remove(); }
     show();
   });
 }
 
-// ---------- Voice countdown and big centre popup ----------
+// ---------- Big centre popup ----------
 let koShown = null;
 const LOAD_T = Date.now();   // popups only for things that happen after the page has loaded
-// Spoken countdown (English numbers read clearly on most systems). Needs the sound tap like the beeps
-function say(t) {
-  if (!sound || !window.speechSynthesis) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = "en-US"; u.rate = 1.1; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
-}
 // Result plate over the whole screen for about 6 seconds : event header, what happened, the team, the reason
-// and the series score, in the side colour. A short fanfare plays when sound is on.
+// and the series score, in the side colour. A short effect plays when sound is on (no voice).
 function popup({ kind, side, label, name, detail, meta, score }) {
   // Own layer above the screen, scaled like the stage, so screen redraws do not remove it
   const stage = $("stage"); if (!stage) return;
@@ -239,8 +246,8 @@ function popup({ kind, side, label, name, detail, meta, score }) {
     <div class="b8"><div class="l8">${esc(label)}</div>${sideTag}<div class="n8">${esc(name || "")}</div>${detail ? `<div class="s8">${esc(detail)}</div>` : ""}
     ${score ? `<div class="sc8"><span class="c-r">${score[0]}</span><i>-</i><span class="c-b">${score[1]}</span></div>` : ""}</div></div>`;
   st.append(el);
-  if (kind === "ko" || kind === "match") { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => snd(f, i === 3 ? 600 : 160), i * 170)); say(kind === "ko" ? "Knockout" : "Match winner"); }
-  else if (kind === "game") { snd(784, 200); setTimeout(() => snd(1047, 400), 220); }
+  if (kind === "ko" || kind === "match") [523, 659, 784, 1047].forEach((f, i) => snd(f, i === 3 ? 600 : 160, i * 0.17));
+  else if (kind === "game") { snd(784, 200); snd(1047, 400, 0.22); }
   else snd(440, 500);
   setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 500); }, kind === "match" ? 7000 : 5500);
 }

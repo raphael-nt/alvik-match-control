@@ -4,12 +4,12 @@ export const PANELS = [
   ["info", "Match info"], ["red", "Red team"], ["clock", "Clock"], ["blue", "Blue team"], ["bracket", "Bracket"], ["upnext", "Up next"],
 ];
 export const DEFAULT_LIVE = {
-  info: { x: 40, y: 112, w: 1840, h: 56, on: true },
-  red: { x: 40, y: 184, w: 540, h: 520, on: true },
-  clock: { x: 600, y: 184, w: 720, h: 520, on: true },
-  blue: { x: 1340, y: 184, w: 540, h: 520, on: true },
-  bracket: { x: 40, y: 724, w: 1460, h: 330, on: true },
-  upnext: { x: 1520, y: 724, w: 360, h: 330, on: true },
+  info: { x: 40, y: 112, w: 1840, h: 56, on: false },
+  red: { x: 40, y: 112, w: 540, h: 560, on: true },
+  clock: { x: 600, y: 112, w: 720, h: 560, on: true },
+  blue: { x: 1340, y: 112, w: 540, h: 560, on: true },
+  bracket: { x: 40, y: 692, w: 1460, h: 362, on: true },
+  upnext: { x: 1520, y: 692, w: 360, h: 362, on: true },
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, Math.round(+v || 0)));
 // Merge a stored layout with defaults and keep every panel inside the stage
