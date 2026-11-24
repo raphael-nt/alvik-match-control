@@ -192,3 +192,5 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .top img,.top #evn{align-self:baseline}
 /* Phones : no room for preview windows, open the pages in their own tabs instead */
 @media (max-width:700px){.top #pipb,.pw{display:none}}
+/* Queue day : practice, competition or every match */
+.qday{margin:0 0 10px}.qday .btn span{opacity:.7;font-weight:400}

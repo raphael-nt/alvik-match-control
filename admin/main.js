@@ -172,7 +172,12 @@ function render(force) {
 const redraw = () => { lastKey = ""; formTab = ""; render(); };
 
 // ---------- Field tab helpers ----------
-const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no == null).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
+// Queue day : practice day (P matches), competition day, or every match. Kept on this computer; until chosen
+// it follows the bracket setting (practice until the practice matches are over or a real match has started)
+const QDAYS = [["practice", "วันซ้อม"], ["comp", "วันแข่ง"], ["all", "ทั้งหมด"]];
+const qDay = () => { const v = lstore("a2qday"); return QDAYS.some(([k]) => k === v) ? v : bracketMode(); };
+const inDay = (m, d = qDay()) => d === "all" || (m.stage === "practice") === (d === "practice");
+const upNext = () => matches().filter((m) => m.status === "ready" && m.field_no == null && inDay(m)).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
 // ---------- Things waiting for the admin, shown on top of the field tab ----------
 function alertsHtml() {
@@ -305,9 +310,11 @@ function fieldView() {
       ${done ? (nx.length ? `<div class="btns"><button class="btn primary" data-act="open" data-c="${nx[0].code}">เรียกคู่ถัดไป ${nx[0].code}</button></div>` : "") : refPanel(f, m, g)}
       <div class="btns"><button class="btn" data-act="edit" data-c="${m.code}">ดูหรือแก้เหตุการณ์</button><button class="btn" data-act="transfer">ย้ายเครื่องกรรมการ</button><button class="btn danger" data-act="close" data-c="${m.code}">เอาลงจากสนาม</button></div></div>`;
   }
-  const rows = matches().map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
+  const day = qDay(), dayMs = matches().filter((x) => inDay(x, day));
+  const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}">${t} <span>${matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>`;
+  const rows = dayMs.map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
-  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว</span></div><div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div></div></div>`;
 }
 
 // ---------- Schedule tab ----------
@@ -1138,6 +1145,7 @@ const H = {
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   // The boxes on screen are the truth : save every unticked round, no redraw, untick again if saving fails
+  qday(b) { lstore("a2qday", b.dataset.m); redraw(); },
   async bkr(b) {
     const bkh = [...document.querySelectorAll('[data-act="bkr"]')].filter((x) => !x.checked).map((x) => x.dataset.m);
     try { await adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), bkh } } }); toast("เปลี่ยนรอบในตารางสายแล้ว"); }
