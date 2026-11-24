@@ -43,10 +43,36 @@ function liveView() {
   const body = {
     red: tm("red"), blue: tm("blue"),
     clock: `<div class="lc">${rules ? `<div class="t" id="ct">1:30.0</div><div class="p" id="cp"></div><div class="msg" id="cm"></div>` : `<div class="t">${m.red_wins}-${m.blue_wins}</div><div class="p">Game ${gn} of ${m.bo}</div>`}</div>`,
-    bracket: `<div class="bkarea">${bracketHtml({ dark: true, compact: true, maxh: L.bracket.h - 16, hide: bkHide() })}</div>`,
+    bracket: gameTable(m, L.bracket.h),
     upnext: upNextHtml(),
   };
-  return `${head()}${Object.entries(L).filter(([k, p]) => p.on && body[k]).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
+  // Which round is on : round name, match code and game, on the right of the header
+  const rnd = `<span>${esc(m.grp ? grpName(m.grp) : stageLabel(m.stage))}</span><span>${esc(m.code)}</span><span>Game ${gn} of ${m.bo}</span>`;
+  return `${head(rnd)}${Object.entries(L).filter(([k, p]) => p.on && body[k]).map(([k, p]) => `<div class="lp lp-${k}" style="left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px">${body[k]}</div>`).join("")}<div id="cd"></div><div id="bn"></div>`;
+}
+// Games of the match on the field, one row per game up to its Bo. Sides swap every game : odd games keep the
+// match sides, even games show the two teams the other way round. Replays (ties) get their own row.
+function gameTable(m, h) {
+  const all = gamesOf(m.code).filter((x) => x.status !== "void").sort((a, b) => a.idx - b.idx), rows = [];
+  let k = 0;
+  for (const x of all) { if (x.status === "replay") rows.push({ no: k + 1, g: x }); else rows.push({ no: ++k, g: x }); }
+  for (let n = k + 1; n <= m.bo; n++) rows.push({ no: n, g: null });
+  const rh = Math.max(30, Math.min(56, Math.floor((h - 70) / Math.max(1, rows.length + 1))));
+  const cur = openGame(m.code);
+  const team = (no, side) => { const s = no % 2 ? side : side === "red" ? "blue" : "red"; return { seed: m[s + "_seed"], name: sideName(m, s) }; };
+  const body = rows.map(({ no, g }) => {
+    const r = team(no, "red"), b = team(no, "blue");
+    const winSeed = g && g.status === "done" ? (g.winner === "red" ? m.red_seed : g.winner === "blue" ? m.blue_seed : null) : null;
+    const cell = (t, cls) => `<td class="gt-t"><div class="${cls}${winSeed != null && t.seed === winSeed ? " win" : ""}"><span>${esc(t.name)}</span></div></td>`;
+    let res;
+    if (!g) res = m.status === "done" ? `<em class="muted">Not needed</em>` : `<em class="muted">-</em>`;
+    else if (g.status === "done") res = `<b>${esc(teamName(winSeed))} wins</b> <small>${esc(RULE_EN[g.method] || "")}</small>`;
+    else if (g.status === "replay") res = `<em>Tie, replayed</em>`;
+    else if (cur && cur.id === g.id) res = `<em class="on">${g.status === "ready" ? "Next" : "Playing"}</em>`;
+    else res = `<em class="muted">-</em>`;
+    return `<tr class="${cur && g && cur.id === g.id ? "now" : ""}${g && g.status === "replay" ? " rp" : ""}"><td class="gt-n">Game ${no}</td>${cell(r, "side-r")}${cell(b, "side-b")}<td class="gt-p">${g && g.pattern ? g.pattern : "-"}</td><td class="gt-r">${res}</td></tr>`;
+  }).join("");
+  return `<div class="gt" style="--rh:${rh}px"><table><thead><tr><th></th><th class="c-r">RED</th><th class="c-b">BLUE</th><th>Pattern</th><th>Result</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 // Custom screen : the two names typed in Admin and the big clock, nothing else
 function customView() {

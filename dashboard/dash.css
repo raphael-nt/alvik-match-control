@@ -204,3 +204,18 @@ body.cur,body.cur *{cursor:default}
 .cu .lt{align-content:center;justify-items:center;text-align:center}.cu .lt .n{font-size:88px;font-weight:800}
 .cu .lc{display:flex;flex-direction:column;justify-content:center}
 .cu .lc .sc{font-size:90px;font-weight:800;margin-top:20px}.cu .lc .sc .c-r{color:#ff7a6e}.cu .lc .sc .c-b{color:#7ea2ff}
+/* Header round label : round name, match, game */
+.top .rnd span+span{margin-left:28px}
+/* Live screen : games of the match on the field, sides swap every game */
+.gt{height:100%;background:var(--panel);border-radius:10px;padding:12px 20px;overflow:hidden}
+.gt table{width:100%;border-collapse:separate;border-spacing:0 6px;font-size:calc(var(--rh) * .5)}
+.gt th{font-size:20px;font-weight:600;color:var(--muted);text-align:left;padding:0 12px;letter-spacing:.04em}.gt th.c-r{color:#ff7a6e}.gt th.c-b{color:#7ea2ff}
+.gt td{height:var(--rh);padding:0 12px;white-space:nowrap;vertical-align:middle}
+.gt-n{width:130px;font-weight:700;color:var(--muted)}
+.gt-t{width:30%;padding:0 4px!important}
+.gt-t>div{height:calc(var(--rh) - 6px);display:flex;align-items:center;padding:0 16px;border-radius:8px;background:var(--cs);border-left:8px solid var(--c);font-weight:600;min-width:0}
+.gt-t>div span{overflow:hidden;text-overflow:ellipsis}.gt-t>.win{box-shadow:inset 0 0 0 3px var(--tape)}
+.gt-p{width:110px;text-align:center;color:var(--muted)}
+.gt-r em{font-style:normal}.gt-r em.on{color:var(--tape);font-weight:700}.gt-r small{color:var(--muted);font-size:.7em;margin-left:8px}
+.gt tr.now td{background:#ffffff0d}.gt tr.now td:first-child{border-radius:8px 0 0 8px;box-shadow:inset 6px 0 0 var(--tape);color:var(--ink)}.gt tr.now td:last-child{border-radius:0 8px 8px 0}
+.gt tr.rp{opacity:.6}
