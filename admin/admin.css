@@ -200,3 +200,5 @@ td.rt{white-space:nowrap}td.rt .btn,td.rt select{margin:1px 0}select.sm{min-heig
 .cx .tl{display:grid;gap:4px}.cx .tl .muted{font-size:13px}
 /* Referee panel : who is on each field colour this game */
 .rpw{margin:0;font-size:14px}.rpw .pill{margin-right:4px}
+/* The referee preview scrolls with the wheel or a finger; its buttons stay locked by watch mode */
+.pw[data-k="ref"] .pwb iframe{pointer-events:auto}
