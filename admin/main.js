@@ -161,11 +161,13 @@ function pipZoom(el) {
     pz.hidden = !pipSt.zoomOn;
     tb.classList.toggle("on", !!pipSt.zoomOn); tb.setAttribute("aria-pressed", pipSt.zoomOn ? "true" : "false");
     if (!pipSt.zoomOn) return;
-    const b = zBoxOf(dashMode);
+    const b = zBoxOf(dashMode), saved = event().dash_layout?.zoom?.[dashMode] || null;
     Object.assign(rc.style, { left: b.x + "%", top: b.y + "%", width: b.w + "%", height: b.h + "%" });
-    const has = !!event().dash_layout?.zoom?.[dashMode];
-    lbl.textContent = dashMode ? `โหมด ${dashMode}${has ? " ซูมอยู่" : ""}` : "รอจอ Dashboard";
-    ap.disabled = !dashMode; fu.disabled = !dashMode || !has;
+    // A dashed box means the box on screen is not the one the Dashboard is showing yet
+    const dirty = !saved || Math.abs(saved.x - b.x) > 0.01 || Math.abs(saved.y - b.y) > 0.01 || Math.abs(saved.w - b.w) > 0.01;
+    rc.classList.toggle("dirty", dirty); ap.classList.toggle("primary", dirty && !!dashMode);
+    lbl.textContent = dashMode ? `โหมด ${dashMode} ${saved ? (dirty ? "แก้กรอบแล้ว ยังไม่ได้กดใช้" : "ซูมอยู่") : "ยังไม่ซูม"}` : "รอจอ Dashboard";
+    ap.disabled = !dashMode; fu.disabled = !dashMode || !saved;
   };
   pz.__draw = draw;
   const setBox = (b) => { (pipSt.zb ||= {})[dashMode] = zClamp(b); pipSave(); draw(); };
@@ -177,9 +179,12 @@ function pipZoom(el) {
     const mv = (ev) => {
       const dx = ((ev.clientX - x0) / r.width) * 100, dy = ((ev.clientY - y0) / r.height) * 100;
       if (!h) return setBox({ ...b0, x: b0.x + dx, y: b0.y + dy });
+      // The corner opposite the one being dragged stays put, so the box grows and shrinks instead of sliding
+      // when it reaches an edge. That is also why the size is capped by the room left from that corner.
       const right = b0.x + b0.w, bot = b0.y + b0.h;
+      const lim = h === "se" ? Math.min(100 - b0.x, 100 - b0.y) : h === "nw" ? Math.min(right, bot) : h === "ne" ? Math.min(100 - b0.x, bot) : Math.min(right, 100 - b0.y);
       let s = h === "se" ? Math.max(b0.w + dx, b0.h + dy) : h === "nw" ? Math.max(b0.w - dx, b0.h - dy) : h === "ne" ? Math.max(b0.w + dx, b0.h - dy) : Math.max(b0.w - dx, b0.h + dy);
-      s = Math.max(ZMIN, Math.min(100, s));
+      s = Math.max(ZMIN, Math.min(lim, s));
       setBox({ x: h === "nw" || h === "sw" ? right - s : b0.x, y: h === "nw" || h === "ne" ? bot - s : b0.y, w: s, h: s });
     };
     const up = () => { rc.removeEventListener("pointermove", mv); rc.removeEventListener("pointerup", up); rc.removeEventListener("pointercancel", up); };
