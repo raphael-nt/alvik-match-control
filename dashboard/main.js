@@ -7,13 +7,25 @@ import { unlock, tone, countDigit, countdown, stopCount, endSound } from "../sha
 
 useMarks();
 const stage = $("stage");
-function fit() { const k = Math.min(innerWidth / 1920, innerHeight / 1080); stage.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px,${(innerHeight - 1080 * k) / 2}px) scale(${k})`; stage.style.left = 0; stage.style.top = 0; }
+// Embedded in the Admin preview window (dashboard/?embed=1) : no fullscreen prompt, stays silent, never zooms,
+// so the preview always shows the whole screen for the zoom box to be drawn on
+const EMBED = new URLSearchParams(location.search).has("embed");
+// Zoom : Admin stores one box per screen mode in dash_layout.zoom, as percentages of the 1920 x 1080 screen.
+// With a box set, only that part of the screen is drawn, filling the TV. Without one, the whole screen is drawn.
+let zoomBox = null;
+function fit() {
+  const z = zoomBox;
+  const zx = z ? (z.x * 1920) / 100 : 0, zy = z ? (z.y * 1080) / 100 : 0;
+  const zw = z ? (z.w * 1920) / 100 : 1920, zh = z ? (z.h * 1080) / 100 : 1080;
+  const k = Math.min(innerWidth / zw, innerHeight / zh);
+  stage.style.transform = `translate(${(innerWidth - zw * k) / 2 - zx * k}px,${(innerHeight - zh * k) / 2 - zy * k}px) scale(${k})`;
+  stage.style.left = 0; stage.style.top = 0;
+}
 addEventListener("resize", fit); fit();
 let sound = false;
 $("fs").onclick = async () => { unlock(); try { await document.documentElement.requestFullscreen(); } catch (e) {} sound = true; tone(660, 80); $("fs").remove(); try { await navigator.wakeLock?.request("screen"); } catch (e) {} };
 const snd = (f, ms, at) => sound && tone(f, ms, at);
-// Embedded in the Admin preview window (dashboard/?embed=1) : no fullscreen prompt, stays silent
-if (new URLSearchParams(location.search).has("embed")) $("fs").remove();
+if (EMBED) $("fs").remove();
 
 // Header on every screen; an announcement from Admin shows as a bar over the top of the screen
 const head = (right) => `<div class="top"><img src="../shared/irap.png" alt=""><h1>${esc(event().name)}</h1><span class="rnd">${right || ""}</span>${fsSupported() ? `<button class="fsh" data-fsh aria-label="Full screen" title="Full screen">${FS_ICON}</button>` : ""}</div>${event().notice_on && event().notice ? `<div class="notice">${esc(event().notice)}</div>` : ""}`;
@@ -30,7 +42,15 @@ function mode() {
   if ((F && F.status === "done") || (!F && allMatchesDone() && S.ranking.some((r) => r.pos === 1))) return "champion";
   const o = onField();
   if (o && o.m.stage === "custom") return "custom";   // the custom match on the field gets its own clock screen
-  return o ? "live" : "rounds";   // between matches : the schedule table of the round, not the whole bracket
+  if (o) return "live";
+  // Between matches, waiting for Admin to call the next one from the queue :
+  // after a match ends, the schedule table of its round; once every match of that round is done, the whole bracket
+  const f = field(1), last = f && f.match_code ? match(f.match_code) : null;
+  if (last && last.status === "done") {
+    const r = roundList().find((x) => x.key === roundKey(last));
+    if (r && r.ms.every((m) => m.status === "done")) return "bracket";
+  }
+  return "rounds";
 }
 
 // ---------- Live ----------
@@ -168,25 +188,34 @@ function drawView() {
   const cols = [...Array(c).keys()].map((i) => seeds.slice(i * per, (i + 1) * per)).filter((a) => a.length);
   return `${head("Draw")}<div class="drawcols" style="grid-template-columns:repeat(${cols.length || 1},1fr)">${cols.map((arr, i) => col(cols.length > 1 ? `Seeds ${arr[0]} to ${arr[arr.length - 1]}` : "Seeds", arr)).join("")}</div>`;
 }
+// Results screen : 1st in the middle at the biggest size, 2nd and 3rd smaller below it, every other place
+// small along the bottom edge. Places that are tied share one box and get an = after the number.
 function champView() {
-  const F = finalMatch();
+  const F = finalMatch(), rk = S.ranking.filter((r) => r.seed != null);
+  let one = rk.filter((r) => r.pos === 1), two = rk.filter((r) => r.pos === 2);
+  const three = rk.filter((r) => r.pos === 3);
   if (F && F.winner_seed != null) {
     const W = F.winner_seed, R = W === F.red_seed ? F.blue_seed : F.red_seed;
-    return `${head("Results")}<div class="champ"><div class="cbig"><div class="k">Champion</div><div class="v">${esc(teamName(W))}</div><div class="s">Runner-up ${esc(teamName(R))}</div></div>
-      <div class="rk">${S.ranking.filter((r) => r.pos >= 3 && r.seed != null).map((r) => `<div><b>${r.label}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div></div>`;
-  }
-  const top1 = S.ranking.filter((r) => r.pos === 1 && r.seed != null), top2 = S.ranking.filter((r) => r.pos === 2 && r.seed != null);
-  if (!allMatchesDone() || !top1.length) return bracketView();
-  const minRest = top1.length === 1 && top2.length ? 3 : 2;
-  const sub = top1.length === 1 && top2.length ? `Runner-up ${top2.map((r) => esc(teamName(r.seed))).join(", ")}` : "";
-  return `${head("Results")}<div class="champ"><div class="cbig"><div class="k">${top1.length > 1 ? "Champions" : "Champion"}</div><div class="v">${top1.map((r) => esc(teamName(r.seed))).join(", ")}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>
-    <div class="rk">${S.ranking.filter((r) => r.pos >= minRest && r.seed != null).map((r) => `<div><b>${r.label}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div></div>`;
+    if (!one.length) one = [{ pos: 1, seed: W }];
+    if (!two.length && R != null) two = [{ pos: 2, seed: R }];
+  } else if (!allMatchesDone() || !one.length) return bracketView();
+  const names = (a) => a.map((r) => esc(teamName(r.seed))).join(", ");
+  const place = (a, k) => (a.length ? `<div class="cm"><div class="k">${k}${a.length > 1 ? " (tied)" : ""}</div><div class="v">${names(a)}</div></div>` : "");
+  const mid = two.length || three.length ? `<div class="cmid">${place(two, "2nd")}${place(three, "3rd")}</div>` : "";
+  const rest = rk.filter((r) => r.pos > 3);
+  const bottom = rest.length ? `<div class="crest">${rest.map((r) => `<div><b>${esc(r.label)}</b><span>${esc(teamName(r.seed))}</span></div>`).join("")}</div>` : "";
+  return `${head("Results")}<div class="champ"><div class="ctop">
+    <div class="cbig"><div class="k">${one.length > 1 ? "Champions" : "Champion"}</div><div class="v">${names(one)}</div></div>${mid}</div>${bottom}</div>`;
 }
 
-let key = "", cur = "";
+let key = "", cur = "", sentMode = "";
 function render() {
   if (!S.ready) { stage.innerHTML = head("Loading"); paintNet(); return; }
   const md = mode(), f = field(1);
+  // Follow the zoom box of the mode on screen now, and tell the Admin preview which mode it is drawing
+  const z = EMBED ? null : (event().dash_layout?.zoom || {})[md] || null;
+  if (JSON.stringify(z) !== JSON.stringify(zoomBox)) { zoomBox = z; fit(); }
+  if (EMBED && md !== sentMode) { sentMode = md; try { parent.postMessage({ a2: "mode", mode: md }, location.origin); } catch (e) {} }
   const k = md + JSON.stringify([event().name, event().notice, event().notice_on, event().rules_mode, event().dash_layout, event().draw_state, teamsArr().map((t) => [t.name, t.absent]), groups().map((g) => [g.grp, g.stage, g.adv]), matches().map((x) => [x.code, x.status, x.red_wins, x.blue_wins, x.red_seed, x.blue_seed, x.field_no, x.sched_at]), f && [f.match_code, f.phase], [...T.a2_game.values()].map((g) => [g.id, g.version, g.status]), T.a2_mark.size, S.standings.map((r) => [r.pos, r.seed, r.mw, r.gw, r.sure]), S.ranking.map((r) => [r.pos, r.label, r.seed]), customMatch() && [teamName(901), teamName(902), customMatch().bo]]) + (md === "draw" && !event().draw_state?.live ? Math.floor(Date.now() / 800) : "");
   if (k === key) { paintNet(); return; }
   key = k; cur = md;

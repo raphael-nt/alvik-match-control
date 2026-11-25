@@ -23,8 +23,8 @@ const _table = (g) => {
   const gr = PV.groups.find((x) => x.grp === g); if (!gr) return [];
   return (gr.srcs || []).map((src, i) => ({ grp: g, slot: i, pos: i + 1, seed: src && src.seed != null ? src.seed : null, mw: 0, ml: 0, gw: 0, gl: 0, sure: false }));
 };
-const _team = (sd) => (PV ? (th() ? "ทีม " : "Team ") + sd : teamName(sd));
-const _side = (m, side) => (PV ? (m[side + "_seed"] != null ? (th() ? "ทีม " : "Team ") + m[side + "_seed"] : srcLabel(side === "red" ? m.red_src : m.blue_src)) : sideName(m, side));
+const _team = (sd) => (PV ? "Team " + sd : teamName(sd));
+const _side = (m, side) => (PV ? (m[side + "_seed"] != null ? "Team " + m[side + "_seed"] : srcLabel(side === "red" ? m.red_src : m.blue_src)) : sideName(m, side));
 
 // Box sizes. bracketHtml({ compact: true }) swaps in shorter rows with no match chips and no champion box,
 // for short panels such as the Live screen strip
@@ -162,7 +162,7 @@ function chipHtml(m, clickable) {
 }
 function boxHtml(b, clickable, mByGrp, rounds) {
   const isM = b.kind === "m", adv = isM ? 0 : b.g.adv || 0;
-  const title = isM ? (b.m.stage === "final" ? (th() ? "ชิงชนะเลิศ" : "Final") : b.m.stage === "third" ? (th() ? "ชิงอันดับที่ 3" : "3rd place") : b.m.code) : grpName(b.g.grp);
+  const title = isM ? (b.m.stage === "final" ? "Final" : b.m.stage === "third" ? "3rd place" : b.m.code) : grpName(b.g.grp);
   const stLbl = isM ? stageLabel(b.m.stage) : hasGrpLabel(b.g.grp) ? "" : stageLabel(b.g.stage);
   const sub = isM ? `${stLbl && b.m.stage !== "final" && b.m.stage !== "third" ? stLbl + ", " : ""}Bo${b.m.bo}` : stLbl;
   const rh = rowsOf(b).map((r) => {
@@ -347,7 +347,7 @@ function wires(state) {
 function champHtml(boxes, finalKey) {
   const fb = (finalKey && boxes[finalKey]) || boxes["m:F"] || Object.values(boxes).find((b) => b.kind === "m" && b.m.stage === "final"); if (!fb) return "";
   const w = fb.m.winner_seed;
-  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>${th() ? "แชมป์" : "Champion"}</span><b>${w != null ? esc(_team(w)) : th() ? "รอผล" : "TBD"}</b></div>`;
+  return `<div class="bk-champ${w != null ? " has" : ""}" style="left:${fb.x}px;top:${Math.max(4, fb.y - 84)}px;width:${COLW}px"><span>Champion</span><b>${w != null ? esc(_team(w)) : "TBD"}</b></div>`;
 }
 
 // Bracket HTML. opts.clickable makes each match chip clickable (data-act="edit"), opts.rounds makes each box header
@@ -396,9 +396,9 @@ export function gamePills(m) {
 }
 export function roundTitle(r) {
   const gs = [...new Set(r.ms.map((m) => m.grp).filter(Boolean))];
-  if (gs.length) return gs.map((g) => grpName(g)).join(th() ? " และ " : " and ");
-  if (r.key === "practice") return th() ? "คู่ซ้อม" : "Practice";
-  if (r.key === "final") return r.ms.some((m) => m.stage === "third") ? (th() ? "ชิงชนะเลิศและชิงที่ 3" : "Final and 3rd place") : (th() ? "ชิงชนะเลิศ" : "Final");
+  if (gs.length) return gs.map((g) => grpName(g)).join(" and ");
+  if (r.key === "practice") return "Practice";
+  if (r.key === "final") return r.ms.some((m) => m.stage === "third") ? "Final and 3rd place" : "Final";
   return stageLabel(r.key);
 }
 // Light table for Admin and the referee phone. opts.clickable lets a row open the match (data-act="edit")

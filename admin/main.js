@@ -81,10 +81,14 @@ function shell() {
 // edges; width, place and minimized state are kept on this computer
 const PIP = [
   { k: "ref", title: "หน้ากรรมการ", src: "../ref/?watch=1", open: "../ref/?watch=1", vw: 390, vh: 760, w: 230, min: 150, max: 585 },
-  { k: "dash", title: "Dashboard", src: "../dashboard/?embed=1", open: "../dashboard/", vw: 1280, vh: 720, w: 400, min: 240, max: 1280 },
+  { k: "dash", title: "Dashboard", src: "../dashboard/?embed=1", open: "../dashboard/", vw: 1280, vh: 720, w: 400, min: 240, max: 1280, zoom: true },
 ];
 const PIP_HEAD = 34, PIP_GAP = 12;
-const PIP_SVG = { open: `<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>`, min: `<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>`, max: `<svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/></svg>`, grip: `<svg viewBox="0 0 24 24"><path d="M5 13V5h8M5 5l7 7"/></svg>` };
+const PIP_SVG = { open: `<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg>`, min: `<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>`, max: `<svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/></svg>`, grip: `<svg viewBox="0 0 24 24"><path d="M5 13V5h8M5 5l7 7"/></svg>`, zoom: `<svg viewBox="0 0 24 24"><path d="M7 2v15h15M2 7h15v15"/></svg>` };
+// The zoom box is kept as percentages of the Dashboard screen. The screen is 16 by 9, so a box with the same
+// width and height in percent is 16 by 9 as well, which is why one size value drives both.
+const ZMIN = 12, zBoxNew = () => ({ x: 20, y: 20, w: 60, h: 60 });
+const zClamp = (b) => { const s = Math.max(ZMIN, Math.min(100, b.w)); return { x: Math.max(0, Math.min(100 - s, b.x)), y: Math.max(0, Math.min(100 - s, b.y)), w: s, h: s }; };
 let pipSt = (() => { try { return JSON.parse(lstore("a2pip") || "null"); } catch (e) { return null; } })() || { on: innerWidth >= 900 };
 const pipSave = () => lstore("a2pip", JSON.stringify(pipSt));
 const pipH = (p, w) => Math.round((w * p.vh) / p.vw);
@@ -115,10 +119,12 @@ function pipMount() {
     const el = document.createElement("section");
     el.className = "pw"; el.dataset.k = p.k; el.setAttribute("aria-label", p.title);
     el.innerHTML = `<header class="pwh"><span class="pwi pwg" title="ลากเพื่อปรับขนาด" aria-hidden="true">${PIP_SVG.grip}</span><b>${p.title}</b><span class="sp"></span>
+      ${p.zoom ? `<button type="button" class="pwi" data-pw="zoom" title="เลือกพื้นที่ซูมของจอ Dashboard" aria-label="เลือกพื้นที่ซูมของจอ Dashboard" aria-pressed="false">${PIP_SVG.zoom}</button>` : ""}
       <a class="pwi" href="${p.open}" target="_blank" rel="noopener" title="เปิดในแท็บใหม่" aria-label="เปิด${p.title}ในแท็บใหม่">${PIP_SVG.open}</a><button type="button" class="pwi" data-pw="min"></button></header>
-      <div class="pwb"><iframe src="${p.src}" title="${p.title}" tabindex="-1"></iframe></div>`;
+      <div class="pwb"><iframe src="${p.src}" title="${p.title}" tabindex="-1"></iframe>${p.zoom ? `<div class="zoomw" hidden><div class="zbox"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+      <div class="zbar"><b data-pz="mode">รอจอ Dashboard</b><button type="button" class="btn small" data-pz="apply" disabled>ใช้กรอบนี้</button><button type="button" class="btn small" data-pz="full" disabled>เต็มจอ</button></div></div>` : ""}</div>`;
     document.body.appendChild(el);
-    pipPlace(el); pipDrag(el, p);
+    pipPlace(el); pipDrag(el, p); if (p.zoom) pipZoom(el);
   }
   pipSave();
 }
@@ -142,6 +148,55 @@ function pipDrag(el, p) {
     hd.addEventListener("pointermove", mv); hd.addEventListener("pointerup", up); hd.addEventListener("pointercancel", up);
   });
 }
+// Zoom box drawn over the Dashboard preview. Drag inside it to move, drag a corner to resize (it stays 16 by 9),
+// then press the button to send it to the real screen. One box per screen mode; the preview itself never zooms,
+// and tells us which mode it is drawing so the box edits the right one.
+let dashMode = "";
+const zBoxOf = (md) => zClamp({ ...((pipSt.zb || {})[md] || event().dash_layout?.zoom?.[md] || zBoxNew()) });
+function pipZoom(el) {
+  const pz = el.querySelector(".zoomw"), rc = pz.querySelector(".zbox"), host = el.querySelector(".pwb");
+  const tb = el.querySelector('[data-pw="zoom"]'), lbl = pz.querySelector('[data-pz="mode"]');
+  const ap = pz.querySelector('[data-pz="apply"]'), fu = pz.querySelector('[data-pz="full"]');
+  const draw = () => {
+    pz.hidden = !pipSt.zoomOn;
+    tb.classList.toggle("on", !!pipSt.zoomOn); tb.setAttribute("aria-pressed", pipSt.zoomOn ? "true" : "false");
+    if (!pipSt.zoomOn) return;
+    const b = zBoxOf(dashMode);
+    Object.assign(rc.style, { left: b.x + "%", top: b.y + "%", width: b.w + "%", height: b.h + "%" });
+    const has = !!event().dash_layout?.zoom?.[dashMode];
+    lbl.textContent = dashMode ? `โหมด ${dashMode}${has ? " ซูมอยู่" : ""}` : "รอจอ Dashboard";
+    ap.disabled = !dashMode; fu.disabled = !dashMode || !has;
+  };
+  pz.__draw = draw;
+  const setBox = (b) => { (pipSt.zb ||= {})[dashMode] = zClamp(b); pipSave(); draw(); };
+  rc.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || !dashMode) return;
+    const r = host.getBoundingClientRect(); if (!r.width || !r.height) return;
+    const h = (e.target.dataset && e.target.dataset.h) || "", b0 = zBoxOf(dashMode), x0 = e.clientX, y0 = e.clientY;
+    e.preventDefault(); e.stopPropagation(); rc.setPointerCapture(e.pointerId);
+    const mv = (ev) => {
+      const dx = ((ev.clientX - x0) / r.width) * 100, dy = ((ev.clientY - y0) / r.height) * 100;
+      if (!h) return setBox({ ...b0, x: b0.x + dx, y: b0.y + dy });
+      const right = b0.x + b0.w, bot = b0.y + b0.h;
+      let s = h === "se" ? Math.max(b0.w + dx, b0.h + dy) : h === "nw" ? Math.max(b0.w - dx, b0.h - dy) : h === "ne" ? Math.max(b0.w + dx, b0.h - dy) : Math.max(b0.w - dx, b0.h + dy);
+      s = Math.max(ZMIN, Math.min(100, s));
+      setBox({ x: h === "nw" || h === "sw" ? right - s : b0.x, y: h === "nw" || h === "ne" ? bot - s : b0.y, w: s, h: s });
+    };
+    const up = () => { rc.removeEventListener("pointermove", mv); rc.removeEventListener("pointerup", up); rc.removeEventListener("pointercancel", up); };
+    rc.addEventListener("pointermove", mv); rc.addEventListener("pointerup", up); rc.addEventListener("pointercancel", up);
+  });
+  tb.onclick = () => { pipSt.zoomOn = !pipSt.zoomOn; pipSave(); draw(); };
+  const saveZoom = async (zoom, ok) => { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), zoom } } }), ok); await loadAll().catch(() => {}); draw(); };
+  ap.onclick = () => saveZoom({ ...(event().dash_layout?.zoom || {}), [dashMode]: zBoxOf(dashMode) }, `จอ Dashboard ซูมตามกรอบในโหมด ${dashMode} แล้ว`);
+  fu.onclick = () => { const z = { ...(event().dash_layout?.zoom || {}) }; delete z[dashMode]; return saveZoom(z, `จอ Dashboard โหมด ${dashMode} กลับเป็นเต็มจอแล้ว`); };
+  draw();
+}
+// The embedded Dashboard says which mode it is drawing
+addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data || e.data.a2 !== "mode") return;
+  dashMode = String(e.data.mode || "");
+  document.querySelectorAll(".pw .zoomw").forEach((x) => x.__draw && x.__draw());
+});
 addEventListener("resize", () => document.querySelectorAll(".pw").forEach(pipPlace));
 
 // ---------- Advanced sections ----------
@@ -181,12 +236,12 @@ const upNext = () => qDay() === "custom" ? [customMatch()].filter((x) => x && x.
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
 // ---------- Things waiting for the admin, shown on top of the field tab ----------
 function alertsHtml() {
-  const out = [], f = field(1), onField = f && f.match_code ? match(f.match_code) : null, ev = event();
+  const out = [], ev = event();
   matches().filter((m) => m.absent_req).forEach((m) => out.push(`<div class="al warn">คู่ ${m.code} : กรรมการขอให้ฝั่ง${sideTh(m.absent_req)} (${esc(sideName(m, m.absent_req))}) แพ้บาย
     <button class="btn small danger" data-act="approve" data-c="${m.code}" data-s="${m.absent_req}">อนุมัติ</button><button class="btn small" data-act="reject" data-c="${m.code}">ไม่อนุมัติ</button></div>`));
   const tied = [...new Set(S.standings.filter((r) => r.tied).map((r) => r.grp))];
   if (tied.length) out.push(`<div class="al warn">กลุ่ม ${tied.join(", ")} มีทีมคะแนนเท่ากันทุกอย่าง ต้องจัดลำดับเองก่อนทีมจะเข้ารอบต่อ <button class="btn small" data-act="gotab" data-t="groups">ไปจัดลำดับ</button></div>`);
-  if (onField && onField.status !== "done" && !refOnline(f)) out.push(`<div class="al">เครื่องกรรมการไม่ได้ออนไลน์ ถ้าเครื่องเสียให้กดย้ายเครื่องกรรมการ แล้วเปิดหน้ากรรมการในเครื่องใหม่ <button class="btn small" data-act="transfer">ย้ายเครื่องกรรมการ</button></div>`);
+  // No alert when no referee device is online : since migration 025 any number of devices can run the match at once
   if (ev.notice_on && ev.notice) out.push(`<div class="al info">กำลังประกาศบนจอ : ${esc(ev.notice)} <button class="btn small" data-act="noticehide">ซ่อนประกาศ</button></div>`);
   return out.length ? `<div class="alerts">${out.join("")}</div>` : "";
 }
@@ -900,7 +955,7 @@ document.addEventListener("click", (e) => {
 // ---------- Dashboard tab ----------
 function tvView() {
   const ev = event(), cur = ev.tv_mode || "auto";
-  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด ไม่มีขึ้นตารางคู่รายรอบ จบคู่ชิงขึ้นแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"], ["custom", "Custom", "นาฬิกาใหญ่กับชื่อสองทีมของคู่ Custom"]];
+  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด จบคู่แล้วขึ้นตารางคู่รายรอบ ถ้าคู่นั้นเป็นคู่สุดท้ายของรอบขึ้นตารางสาย แล้วรอให้กดเรียกคิว จบคู่ชิงขึ้นหน้าผลแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"], ["custom", "Custom", "นาฬิกาใหญ่กับชื่อสองทีมของคู่ Custom"]];
   const rnd = ev.dash_layout?.rnd || "auto", bkh = new Set(ev.dash_layout?.bkh || []);
   return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
    <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>

@@ -1,5 +1,4 @@
 // Shared library for all pages: live data, clock and display helpers
-import { th } from "./lang.js";
 export const SB_URL = "https://sylaqdubfjgmaxhtrrnk.supabase.co";
 export const SB_KEY = "sb_publishable_9x3-7C7fLbQZBDtkk8YAGw_P1XclMv8";
 export const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -113,7 +112,8 @@ export const teamName = (seed) => { if (seed == null) return ""; const t = T.a2_
 // True when Admin gave the group its own name (for example Qualifying), so the round name is not shown next to it
 export const hasGrpLabel = (g) => { const l = event().format && event().format.labels; return !!(l && l[g]); };
 // Display name of a group : a format can name its groups (pool format : Qualifying, QF1, QF2), otherwise "Group A"
-export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || (th() ? "กลุ่ม " : "Group ") + g; };
+// Names of groups, rounds and team sources stay English everywhere so Admin and the Dashboard read the same
+export const grpName = (g) => { const l = event().format && event().format.labels; return (l && l[g]) || "Group " + g; };
 // Rounds in play order, one per stage; the 3rd place match is shown with the final
 export const roundKey = (m) => (m.stage === "third" ? "final" : m.stage);
 export function roundList() {
@@ -125,7 +125,8 @@ export function roundList() {
   }
   return out;
 }
-export const srcLabel = (src) => (!src ? "" : th() ? (src.seed ? "ทีมลำดับ " + src.seed : src.g ? `อันดับ ${src.p} ${grpName(src.g)}` : src.w ? "ผู้ชนะ " + src.w : src.l ? "ผู้แพ้ " + src.l : "") : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Loser " + src.l : "");
+// Where a team comes from when its name is not known yet. The team beaten in a knockout match is the runner-up of that match.
+export const srcLabel = (src) => (!src ? "" : src.seed ? "Seed " + src.seed : src.g ? `${["", "1st", "2nd", "3rd"][src.p] || src.p + "th"} ${grpName(src.g)}` : src.w ? "Winner " + src.w : src.l ? "Runner-up " + src.l : "");
 export const sideName = (m, side) => { const s = side === "red" ? m.red_seed : m.blue_seed; return s != null ? teamName(s) : srcLabel(side === "red" ? m.red_src : m.blue_src); };
 export const tableOf = (grp) => {
   if (!_cTable || _stRef !== S.standings) {
