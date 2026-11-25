@@ -392,6 +392,46 @@ document.addEventListener("click", async (e) => {
   if (fn === "simple") { if (!confirm(`${SIDE_TH[sd]}ชนะเกมนี้`)) return; await act(() => adm("a2_adm_game", { p_game: g.id, p: { pattern: g.pattern, winner: fieldSide(m.code, g, sd) }, p_version: g.version })); await loadAll().catch(() => {}); }
 });
 document.addEventListener("change", (e) => { const k = e.target.dataset && e.target.dataset.arck; if (k) arCall("check", { item: k, on: e.target.checked }); });
+// ---------- Dragging the queue into a new order ----------
+// A time slot belongs to the queue, not to the match in it : dragging a match into another slot gives it that
+// slot's time and auto call, and hands its own slot to the match it displaced. Matches that are finished or on
+// the field keep their place. Only the slots carry the order, so nothing new is stored and no migration is needed.
+const byQueue = (a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no;
+const qMovable = (x) => x.status !== "done" && x.field_no == null && x.stage !== "custom";
+const GRIP_SVG = `<svg class="gs" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>`;
+let dragCode = null;
+const qRows = () => [...document.querySelectorAll('.tbl tr[data-dc][draggable="true"]')];
+const qClear = () => document.querySelectorAll("tr.dragging, tr.dropto").forEach((x) => x.classList.remove("dragging", "dropto"));
+document.addEventListener("dragstart", (e) => {
+  const tr = e.target.closest && e.target.closest('tr[data-dc][draggable="true"]');
+  if (!tr) return;
+  dragCode = tr.dataset.dc; tr.classList.add("dragging");
+  if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", dragCode); } catch (err) {} }
+});
+document.addEventListener("dragend", () => { dragCode = null; qClear(); });
+document.addEventListener("dragover", (e) => {
+  if (!dragCode) return;
+  const tr = e.target.closest && e.target.closest('tr[data-dc][draggable="true"]');
+  if (!tr || tr.dataset.dc === dragCode) return;
+  e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll("tr.dropto").forEach((x) => x.classList.remove("dropto"));
+  tr.classList.add("dropto");
+});
+document.addEventListener("drop", async (e) => {
+  const tr = e.target.closest && e.target.closest('tr[data-dc][draggable="true"]');
+  if (!dragCode || !tr) return;
+  e.preventDefault();
+  const from = dragCode, to = tr.dataset.dc; dragCode = null; qClear();
+  if (from === to) return;
+  const before = qRows().map((x) => x.dataset.dc), i = before.indexOf(from), j = before.indexOf(to);
+  if (i < 0 || j < 0) return;
+  const slots = before.map((c) => { const x = match(c); return { at: x && x.sched_at ? x.sched_at : "", auto: !!(x && x.auto_open) }; });
+  if (slots.every((s) => !s.at)) { toast("คู่เหล่านี้ยังไม่มีเวลานัด ตั้งเวลาในแท็บตารางเวลาก่อนจึงสลับลำดับได้", true); return; }
+  // The marker is drawn on the top edge of the row under the pointer, so the match lands just above it
+  const after = before.slice(); after.splice(i, 1); after.splice(after.indexOf(to), 0, from);
+  const items = after.map((c, k) => ({ code: c, at: slots[k].at, auto: slots[k].auto }));
+  if (await act(() => adm("a2_adm_schedule", { p_items: items }), `ย้าย ${from} ไปลำดับที่ ${after.indexOf(from) + 1} แล้ว`) !== undefined) { await loadAll().catch(() => {}); redraw(); }
+});
 function fieldView() {
   const f = field(1), m = f && f.match_code ? match(f.match_code) : null, nx = upNext();
   let card;
@@ -406,11 +446,12 @@ function fieldView() {
       ${done ? (nx.length ? `<div class="btns"><button class="btn primary" data-act="open" data-c="${nx[0].code}">เรียกคู่ถัดไป ${nx[0].code}</button></div>` : "") : refPanel(f, m, g)}
       <div class="btns"><button class="btn" data-act="edit" data-c="${m.code}">ดูหรือแก้เหตุการณ์</button><button class="btn" data-act="transfer">ย้ายเครื่องกรรมการ</button><button class="btn danger" data-act="close" data-c="${m.code}">เอาลงจากสนาม</button></div></div>`;
   }
-  const day = qDay(), dayMs = matches().filter((x) => inDay(x, day));
+  // The queue is listed in the order it will be played, which is the order the drag rearranges
+  const day = qDay(), dayMs = matches().filter((x) => inDay(x, day)).sort(byQueue);
   const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}">${t} <span>${k === "custom" ? (customMatch() ? 1 : 0) : matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>`;
-  const rows = dayMs.map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}"><td><b>${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
+  const rows = dayMs.map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}${qMovable(x) ? " drg" : ""}" data-dc="${x.code}"${qMovable(x) ? ' draggable="true"' : ""}><td><b>${qMovable(x) ? `<span class="grip" title="ลากเพื่อสลับลำดับ">${GRIP_SVG}</span>` : ""}${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
-  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียกได้ทีละคู่ "ไว้ทีหลัง" ย้ายคู่ไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}${day === "custom" ? `<div id="qcustom"></div>` : `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div>`}</div></div>`;
+  return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียงตามลำดับที่จะแข่ง ลากแถวสลับลำดับได้ถ้าทีมยังไม่พร้อม เวลานัดอยู่กับช่องไม่ย้ายตามคู่ ปุ่มไว้ทีหลังย้ายไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}${day === "custom" ? `<div id="qcustom"></div>` : `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div>`}</div></div>`;
 }
 
 // ---------- Schedule tab ----------

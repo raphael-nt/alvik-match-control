@@ -19,6 +19,12 @@
 .tbl th{font-size:13px;font-weight:500;color:var(--muted);text-align:left;padding:8px 10px;background:#f3f5f4}
 .tbl td{padding:8px 10px;border-top:1px solid var(--line);vertical-align:middle}
 .tbl tr.sel td{background:var(--tape-soft)}
+/* Drag a queue row onto another to swap their place in the running order */
+.tbl tr.drg{cursor:grab}
+.tbl tr.dragging{opacity:.45}
+.tbl tr.dropto td{box-shadow:inset 0 3px 0 var(--teal)}
+.tbl .grip{display:inline-flex;vertical-align:-3px;margin-right:6px;color:var(--muted)}
+.tbl .grip .gs{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
 .tbl input[type=time]{width:140px}.tbl select{min-width:84px}
 .tbl .num{text-align:right}
 .q td:first-child{color:var(--done);font-weight:600}.tied td{background:#fbeceb}
