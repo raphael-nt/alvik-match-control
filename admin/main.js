@@ -235,7 +235,10 @@ const redraw = () => { lastKey = ""; formTab = ""; render(); };
 // Queue day : practice day (P matches), competition day, or every match. Kept on this computer; until chosen
 // it follows the bracket setting (practice until the practice matches are over or a real match has started)
 const QDAYS = [["practice", "วันซ้อม"], ["comp", "วันแข่ง"], ["all", "ทั้งหมด"], ["custom", "Custom"]];
-const qDay = () => { const v = lstore("a2qday"); return QDAYS.some(([k]) => k === v) ? v : bracketMode(); };
+// While the Dashboard is on its Custom screen the queue is locked to the Custom match, so the call button
+// can only bring the Custom match onto the field and a real match is not called by mistake
+const customLock = () => event().tv_mode === "custom";
+const qDay = () => { if (customLock()) return "custom"; const v = lstore("a2qday"); return QDAYS.some(([k]) => k === v) ? v : bracketMode(); };
 const inDay = (m, d = qDay()) => d === "custom" ? m.stage === "custom" : d === "all" || (m.stage === "practice") === (d === "practice");
 const upNext = () => qDay() === "custom" ? [customMatch()].filter((x) => x && x.status === "ready" && x.field_no == null) : matches().filter((m) => m.status === "ready" && m.field_no == null && inDay(m)).sort((a, b) => (a.sched_at || "9").localeCompare(b.sched_at || "9") || a.order_no - b.order_no);
 const refOnline = (f) => f && f.ref_seen && Date.now() - Date.parse(f.ref_seen) < 30000;
@@ -276,11 +279,12 @@ let customEl = null;
 function customStatus() {
   const X = customMatch(), f = field(1);
   if (!X) return `<p class="muted">ยังไม่มีคู่ Custom พิมพ์ชื่อแล้วกดบันทึก</p>`;
-  return `<p><b>X</b> ${esc(sideName(X, "red"))} พบ ${esc(sideName(X, "blue"))} Bo${X.bo} <span class="pill ${X.status}">${ST_EN[X.status]}</span> ${X.red_wins}-${X.blue_wins}${f && f.match_code === "X" ? " อยู่บนสนาม" : ""}</p>`;
+  const leaving = customLock() && X.status === "done" && f && f.match_code === "X";
+  return `<p><b>X</b> ${esc(sideName(X, "red"))} พบ ${esc(sideName(X, "blue"))} Bo${X.bo} <span class="pill ${X.status}">${ST_EN[X.status]}</span> ${X.red_wins}-${X.blue_wins}${f && f.match_code === "X" ? " อยู่บนสนาม" : ""}${leaving ? ", จบแล้ว จะลงจากสนามเองในไม่กี่วินาทีแล้วพร้อมเรียกใหม่" : ""}</p>`;
 }
 function customHtml() {
   const X = customMatch(), bo = X ? X.bo : 1;
-  return `<div class="card cx"><div class="tl"><b>คู่ Custom</b><span class="muted">พิมพ์ชื่อสองฝั่ง แล้วกดเรียกขึ้นสนาม กรรมการเล่นได้เหมือนคู่ปกติ ผลไม่นับในตารางคะแนน สาย หรืออันดับ จอ Dashboard โหมดอัตโนมัติจะขึ้นจอ Custom เอง</span></div>
+  return `<div class="card cx"><div class="tl"><b>คู่ Custom</b><span class="muted">พิมพ์ชื่อสองฝั่ง แล้วกดเรียกขึ้นสนาม กรรมการเล่นได้เหมือนคู่ปกติ ผลไม่นับในตารางคะแนน สาย หรืออันดับ จอ Dashboard โหมดอัตโนมัติจะขึ้นจอ Custom เอง ถ้าตั้งจอ Dashboard เป็นโหมด Custom คิวจะล็อกที่นี่ จบคู่แล้วคู่จะลงจากสนามเองใน 10 วินาทีและพร้อมเรียกใหม่ด้วยชื่อเดิม</span></div>
     <div class="cxf"><label>ทีมแดง<input id="cxr" maxlength="40" value="${esc(X ? teamName(901) : "")}"></label><label>ทีมน้ำเงิน<input id="cxb" maxlength="40" value="${esc(X ? teamName(902) : "")}"></label>
     <label>Bo<select id="cxbo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label></div>
     <div id="cxst"></div>
@@ -296,6 +300,22 @@ const cxSend = async (fresh) => {
   const r = await act(() => adm("a2_adm_custom", { p_red: $("cxr").value, p_blue: $("cxb").value, p_bo: +$("cxbo").value, p_new: fresh }), fresh ? "เริ่มคู่ Custom ใหม่แล้ว" : "บันทึกคู่ Custom แล้ว");
   await loadAll().catch(() => {}); redraw(); return r !== undefined;
 };
+// In Custom mode a finished Custom match leaves the field by itself and comes back ready to be called again,
+// with the same names and Bo. It waits CX_HOLD first so the Dashboard can show the result banner and score.
+// a2_adm_custom with p_new does both in one step : clears the field and drops the old games.
+const CX_HOLD = 10000;
+let cxDoneAt = 0, cxBusy = false;
+async function cxAuto() {
+  const X = customMatch(), f = field(1);
+  if (!authed || !customLock() || !X || X.status !== "done" || !f || f.match_code !== "X") { cxDoneAt = 0; return; }
+  if (!cxDoneAt) { cxDoneAt = Date.now(); return; }
+  if (cxBusy || Date.now() - cxDoneAt < CX_HOLD) return;
+  cxBusy = true;
+  try { await adm("a2_adm_custom", { p_red: teamName(901), p_blue: teamName(902), p_bo: X.bo, p_new: true }); toast("คู่ Custom จบแล้ว ลงจากสนามและพร้อมเรียกใหม่"); await loadAll().catch(() => {}); redraw(); }
+  catch (e) { toast(e.message || "เอาคู่ Custom ลงจากสนามไม่สำเร็จ", true); }
+  finally { cxBusy = false; cxDoneAt = 0; }
+}
+setInterval(cxAuto, 1000);
 function mountTools() {
   const host = $("qtools"); if (!host) return;
   if (!toolsEl) { toolsEl = document.createElement("div"); toolsEl.innerHTML = toolsHtml(); }
@@ -448,7 +468,8 @@ function fieldView() {
   }
   // The queue is listed in the order it will be played, which is the order the drag rearranges
   const day = qDay(), dayMs = matches().filter((x) => inDay(x, day)).sort(byQueue);
-  const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}">${t} <span>${k === "custom" ? (customMatch() ? 1 : 0) : matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>`;
+  const lock = customLock();
+  const seg = `<div class="seg qday" role="group" aria-label="เลือกวัน">${QDAYS.map(([k, t]) => `<button class="btn small${day === k ? " on" : ""}" data-act="qday" data-m="${k}" aria-pressed="${day === k}"${lock && k !== "custom" ? " disabled" : ""}>${t} <span>${k === "custom" ? (customMatch() ? 1 : 0) : matches().filter((x) => inDay(x, k)).length}</span></button>`).join("")}</div>${lock ? `<p class="muted qlock">ล็อกที่ Custom เพราะจอ Dashboard อยู่โหมด Custom เปลี่ยนโหมดจอในแท็บจอ Dashboard เพื่อกลับไปคิวปกติ</p>` : ""}`;
   const rows = dayMs.map((x) => `<tr class="${f && f.match_code === x.code ? "sel" : ""}${qMovable(x) ? " drg" : ""}" data-dc="${x.code}"${qMovable(x) ? ' draggable="true"' : ""}><td><b>${qMovable(x) ? `<span class="grip" title="ลากเพื่อสลับลำดับ">${GRIP_SVG}</span>` : ""}${x.code}</b></td><td>${esc(sideName(x, "red"))} พบ ${esc(sideName(x, "blue"))}</td><td class="num">${x.status === "locked" ? "" : x.red_wins + "-" + x.blue_wins}</td><td><span class="pill ${x.status}">${ST_EN[x.status]}</span></td><td class="muted">${x.sched_at ? fmtTime(x.sched_at) + (x.auto_open ? " อัตโนมัติ" : "") : ""}</td>
     <td class="rt">${rowTools(x, f)}</td></tr>`).join("");
   return `${hint("ใช้หน้านี้ระหว่างแข่ง : กดเรียกคู่ถัดไป แล้วให้กรรมการกดในมือถือ หรือแอดมินกดแทนได้ทุกขั้นในแผงใต้นาฬิกา ทั้งสองทางใช้กติกาเดียวกัน แก้ผลหรือแพ้บายได้ที่ปุ่มเปิดของคู่นั้น")}${alertsHtml()}<div class="cols"><div class="stack">${card}<div id="qtools"></div></div><div><div class="h2"><h2>ลำดับคิว</h2><span>เรียงตามลำดับที่จะแข่ง ลากแถวสลับลำดับได้ถ้าทีมยังไม่พร้อม เวลานัดอยู่กับช่องไม่ย้ายตามคู่ ปุ่มไว้ทีหลังย้ายไปท้ายคิว ปุ่มเรียกคู่ถัดไปใช้วันที่เลือก</span></div>${seg}${day === "custom" ? `<div id="qcustom"></div>` : `<div class="tw"><table class="tbl"><thead><tr><th>คู่</th><th>ทีม</th><th class="num">สกอร์</th><th>สถานะ</th><th>เวลา</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="muted">ไม่มีคู่ของวันนี้</td></tr>`}</tbody></table></div>`}</div></div>`;
@@ -1001,7 +1022,7 @@ document.addEventListener("click", (e) => {
 // ---------- Dashboard tab ----------
 function tvView() {
   const ev = event(), cur = ev.tv_mode || "auto";
-  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด จบคู่แล้วขึ้นตารางคู่รายรอบ ถ้าคู่นั้นเป็นคู่สุดท้ายของรอบขึ้นตารางสาย แล้วรอให้กดเรียกคิว จบคู่ชิงขึ้นหน้าผลแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"], ["custom", "Custom", "นาฬิกาใหญ่กับชื่อสองทีมของคู่ Custom"]];
+  const M = [["auto", "อัตโนมัติ (แนะนำ)", "มีคู่บนสนามขึ้นถ่ายทอดสด จบคู่แล้วขึ้นตารางคู่รายรอบ ถ้าคู่นั้นเป็นคู่สุดท้ายของรอบขึ้นตารางสาย แล้วรอให้กดเรียกคิว จบคู่ชิงขึ้นหน้าผลแชมป์เอง"], ["live", "ถ่ายทอดสด", "นาฬิกาใหญ่ ทีมแดงและน้ำเงิน ตารางสายย่อ"], ["rounds", "ตารางคู่รายรอบ", "ตารางแข่งของรอบ เวลา คู่ สีฝั่งเกมแรก Bo และผล"], ["bracket", "ตารางสาย", "ตารางสายเต็มจอ พร้อมคู่ถัดไป"], ["standings", "ตารางคะแนน", "อันดับทุกกลุ่ม"], ["schedule", "ตารางเวลา", "ทุกคู่ เวลานัด และสถานะ"], ["draw", "จับสาย", "ตารางจับสายสด ใช้คู่กับแท็บทีมและจับสาย"], ["champion", "แชมป์", "ใช้ได้เมื่อจบคู่ชิง"], ["custom", "Custom", "นาฬิกาใหญ่กับชื่อสองทีมของคู่ Custom คิวในแท็บสนามล็อกที่ Custom จบคู่แล้วลงจากสนามเองและพร้อมเรียกใหม่"]];
   const rnd = ev.dash_layout?.rnd || "auto", bkh = new Set(ev.dash_layout?.bkh || []);
   return `${hint("เลือกว่าจอ Dashboard จะแสดงอะไร กดแล้วจอเปลี่ยนทันที ปกติใช้อัตโนมัติ")}
    <div class="modes">${M.map(([k, t, d]) => `<button class="mode${cur === k ? " on" : ""}" data-act="tvmode" data-m="${k}" ${cur === k ? "disabled" : ""}><b>${t}${cur === k ? ` <span class="pill ready">ใช้อยู่</span>` : ""}</b><span>${d}</span></button>`).join("")}</div>
@@ -1284,13 +1305,16 @@ const H = {
   async tvmode(b) { await act(() => adm("a2_adm_event", { p: { tv_mode: b.dataset.m } }), "เปลี่ยนโหมดจอแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   async rndshow(b) { await act(() => adm("a2_adm_event", { p: { dash_layout: { ...(event().dash_layout || {}), rnd: b.dataset.m } } }), "เปลี่ยนรอบที่แสดงแล้ว"); await loadAll().catch(() => {}); formTab = ""; render(); },
   // The boxes on screen are the truth : save every unticked round, no redraw, untick again if saving fails
-  qday(b) { lstore("a2qday", b.dataset.m); redraw(); },
+  qday(b) { if (customLock()) return; lstore("a2qday", b.dataset.m); redraw(); },
   async cxsave() { await cxSend(false); },
   async cxnew() { if (!confirm("เริ่มคู่ Custom ใหม่ ผลเดิมของคู่นี้จะหายไป")) return; await cxSend(true); },
   async cxcall() {
-    if (!(await cxSend(false))) return;
-    const f = field(1), on = f && f.match_code ? match(f.match_code) : null, X = customMatch();
-    if (on && on.code !== "X" && on.status !== "done") { toast(`คู่ ${on.code} ยังอยู่บนสนาม เอาลงก่อน`, true); return; }
+    const f0 = field(1), on0 = f0 && f0.match_code ? match(f0.match_code) : null;
+    if (on0 && on0.code !== "X" && on0.status !== "done") { toast(`คู่ ${on0.code} ยังอยู่บนสนาม เอาลงก่อน`, true); return; }
+    // A finished Custom match is started again in the same step : its result counts nowhere, so no need to ask
+    const X0 = customMatch();
+    if (!(await cxSend(!!(X0 && X0.status === "done")))) return;
+    const f = field(1), X = customMatch();
     if (X && X.status === "done") { toast("คู่ Custom จบแล้ว กดเริ่มคู่ใหม่ก่อน", true); return; }
     if (f && f.match_code === "X") { toast("คู่ Custom อยู่บนสนามแล้ว"); return; }
     await act(() => adm("a2_adm_call", { p_code: "X" }), "เรียกคู่ Custom ขึ้นสนามแล้ว"); await loadAll().catch(() => {}); redraw();
