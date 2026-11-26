@@ -278,14 +278,14 @@ function toolsHtml() {
 let customEl = null;
 function customStatus() {
   const X = customMatch(), f = field(1);
-  if (!X) return `<p class="muted">ยังไม่มีคู่ Custom พิมพ์ชื่อแล้วกดบันทึก</p>`;
+  if (!X) return `<p class="muted">ยังไม่มีคู่ Custom ชื่อตั้งต้นคือ Red กับ Blue แก้ชื่อได้ หรือกดบันทึกและเรียกขึ้นสนามได้เลย</p>`;
   const leaving = customLock() && X.status === "done" && f && f.match_code === "X";
   return `<p><b>X</b> ${esc(sideName(X, "red"))} พบ ${esc(sideName(X, "blue"))} Bo${X.bo} <span class="pill ${X.status}">${ST_EN[X.status]}</span> ${X.red_wins}-${X.blue_wins}${f && f.match_code === "X" ? " อยู่บนสนาม" : ""}${leaving ? ", จบแล้ว จะลงจากสนามเองในไม่กี่วินาทีแล้วพร้อมเรียกใหม่" : ""}</p>`;
 }
 function customHtml() {
   const X = customMatch(), bo = X ? X.bo : 1;
   return `<div class="card cx"><div class="tl"><b>คู่ Custom</b><span class="muted">พิมพ์ชื่อสองฝั่ง แล้วกดเรียกขึ้นสนาม กรรมการเล่นได้เหมือนคู่ปกติ ผลไม่นับในตารางคะแนน สาย หรืออันดับ จอ Dashboard โหมดอัตโนมัติจะขึ้นจอ Custom เอง ถ้าตั้งจอ Dashboard เป็นโหมด Custom คิวจะล็อกที่นี่ จบคู่แล้วคู่จะลงจากสนามเองใน 10 วินาทีและพร้อมเรียกใหม่ด้วยชื่อเดิม</span></div>
-    <div class="cxf"><label>ทีมแดง<input id="cxr" maxlength="40" value="${esc(X ? teamName(901) : "")}"></label><label>ทีมน้ำเงิน<input id="cxb" maxlength="40" value="${esc(X ? teamName(902) : "")}"></label>
+    <div class="cxf"><label>ทีมแดง<input id="cxr" maxlength="40" value="${esc(X ? teamName(901) : "Red")}"></label><label>ทีมน้ำเงิน<input id="cxb" maxlength="40" value="${esc(X ? teamName(902) : "Blue")}"></label>
     <label>Bo<select id="cxbo">${[1, 3, 5, 7].map((n) => `<option value="${n}" ${bo === n ? "selected" : ""}>Bo${n}</option>`).join("")}</select></label></div>
     <div id="cxst"></div>
     <div class="btns"><button class="btn" data-act="cxsave">บันทึกชื่อ</button><button class="btn primary" data-act="cxcall">บันทึกและเรียกขึ้นสนาม</button><button class="btn" data-act="cxnew">เริ่มคู่ใหม่ (ล้างผลเดิม)</button></div></div>`;
