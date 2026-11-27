@@ -21,6 +21,8 @@
 .tbl tr.sel td{background:var(--tape-soft)}
 /* Drag a queue row onto another to swap their place in the running order */
 .qlock{margin:6px 0 0;font-size:13px}
+/* Which team stood on which colour in a game, with the button to swap them when they played the wrong colours */
+.gcol{margin:6px 0 10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .tbl tr.drg{cursor:grab}
 .tbl tr.dragging{opacity:.45}
 .tbl tr.dropto td{box-shadow:inset 0 3px 0 var(--teal)}

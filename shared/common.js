@@ -86,7 +86,9 @@ export const gameNo = (code, g) => {
 // the right team; the pages turn the field colour into the match side before sending, and back when showing.
 export const flipSide = (s) => (s === "red" ? "blue" : s === "blue" ? "red" : s);
 export const gameNumber = (code, g) => (g ? gameNo(code, g) + (g.status === "replay" ? 1 : 0) : 1);
-export const gameSwapped = (code, g) => !!g && gameNumber(code, g) % 2 === 0;
+// Sides swap every game by game number. side_fix (migration 026) marks a game the teams played on each other's
+// colour, set from the result editor, so that one game is shown and scored the other way round.
+export const gameSwapped = (code, g) => !!g && (gameNumber(code, g) % 2 === 0) !== !!g.side_fix;
 // Field colour of a match side in this game (the same flip turns a field colour back into the match side)
 export const fieldSide = (code, g, side) => (gameSwapped(code, g) ? flipSide(side) : side);
 // A game row seen from the field : red_* and blue_* fields and every side swapped in even games
